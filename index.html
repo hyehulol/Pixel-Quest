@@ -1,0 +1,4044 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PIXEL QUEST</title>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    background:radial-gradient(circle at center,#171722 0%,#08080d 70%);
+    color:white;
+    font-family:Arial,Helvetica,sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    overflow:hidden;
+}
+
+#gameWrapper{
+    position:relative;
+    width:1000px;
+    max-width:100vw;
+}
+
+canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    background:#000;
+    border:3px solid #333;
+    box-shadow:0 0 40px rgba(255,70,0,.2);
+}
+
+#hud{
+    position:absolute;
+    top:12px;
+    left:15px;
+    right:15px;
+    display:flex;
+    justify-content:space-between;
+    pointer-events:none;
+    font-size:18px;
+    font-weight:bold;
+    text-shadow:2px 2px 3px #000;
+    z-index:5;
+}
+
+#controls{
+    position:absolute;
+    bottom:10px;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(0,0,0,.6);
+    padding:7px 15px;
+    border-radius:8px;
+    font-size:13px;
+    z-index:5;
+    white-space:nowrap;
+}
+
+#message{
+    position:absolute;
+    inset:0;
+    display:none;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    background:rgba(0,0,0,.72);
+    text-align:center;
+    z-index:10;
+}
+
+#message h1{
+    font-size:52px;
+    margin:0 0 15px;
+}
+
+#message p{
+    font-size:20px;
+    margin:5px;
+}
+
+#restartButton{
+    margin-top:20px;
+    padding:12px 25px;
+    font-size:18px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    background:#ff5a1f;
+    color:white;
+    font-weight:bold;
+}
+
+#restartButton:hover{
+    background:#ff7a3d;
+}
+</style>
+</head>
+
+<body>
+
+<div id="gameWrapper">
+
+<canvas id="game" width="1000" height="560"></canvas>
+
+<div id="hud">
+    <div>🪙 Mynt: <span id="coins">0</span></div>
+    <div>❤️ Liv: <span id="lives">3</span></div>
+    <div>⭐ Poäng: <span id="score">0</span></div>
+    <div>🏰 Bana: <span id="level">1</span></div>
+</div>
+
+<div id="controls">
+    A/D eller ←/→ = Rörelse
+    &nbsp;&nbsp;
+    SPACE/W/↑ = Hoppa
+    &nbsp;&nbsp;
+    E = Interagera
+    &nbsp;&nbsp;
+    R = Starta om
+</div>
+
+<div id="message">
+    <h1 id="messageTitle"></h1>
+    <p id="messageText"></p>
+    <button id="restartButton">Starta om</button>
+</div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const coinsElement = document.getElementById("coins");
+const livesElement = document.getElementById("lives");
+const scoreElement = document.getElementById("score");
+const levelElement = document.getElementById("level");
+
+const message = document.getElementById("message");
+const messageTitle = document.getElementById("messageTitle");
+const messageText = document.getElementById("messageText");
+const restartButton = document.getElementById("restartButton");
+
+
+/* =========================
+   LJUD
+========================= */
+
+let audioContext = null;
+
+function initAudio(){
+    if(!audioContext){
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+function playSound(
+    frequency,
+    duration=.08,
+    type="square",
+    volume=.04
+){
+    if(!audioContext) return;
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+
+    gain.gain.value = volume;
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start();
+
+    gain.gain.exponentialRampToValueAtTime(
+        .001,
+        audioContext.currentTime + duration
+    );
+
+    oscillator.stop(
+        audioContext.currentTime + duration
+    );
+}
+
+
+/* =========================
+   INPUT
+========================= */
+
+const keys = {};
+
+let jumpPressed = false;
+let interactPressed = false;
+
+window.addEventListener("keydown", e => {
+
+    initAudio();
+
+    if(
+        e.code === "Space" ||
+        e.code === "ArrowUp" ||
+        e.code === "KeyW"
+    ){
+        if(!keys[e.code]){
+            jumpPressed = true;
+        }
+
+        e.preventDefault();
+    }
+
+    if(
+        e.code === "KeyE" &&
+        !keys[e.code]
+    ){
+        interactPressed = true;
+    }
+
+    keys[e.code] = true;
+
+    if(e.code === "KeyR"){
+        restartGame();
+    }
+});
+
+window.addEventListener("keyup", e => {
+    keys[e.code] = false;
+});
+
+
+/* =========================
+   PLAYER
+========================= */
+
+const player = {
+
+    x:100,
+    y:300,
+
+    width:34,
+    height:48,
+
+    velocityX:0,
+    velocityY:0,
+
+    speed:5.2,
+    maxSpeed:5.2,
+    acceleration:1.15,
+
+    jumpPower:14.5,
+    gravity:.58,
+
+    grounded:false,
+
+    direction:1,
+
+    invincible:0,
+
+    coyoteTimer:0,
+    jumpBufferTimer:0,
+
+    jumpsLeft:1,
+
+    walkAnimation:0
+};
+
+
+/* =========================
+   GLOBAL GAME STATE
+========================= */
+
+let cameraX = 0;
+
+let currentLevel = 0;
+
+let coins = 0;
+let lives = 3;
+let score = 0;
+
+let gameRunning = true;
+
+let levelTransition = 0;
+let levelCompleteTimer = 0;
+
+let secretRoomActive = false;
+let secretMedalCollected = false;
+let secretChestOpened = false;
+
+const confetti = [];
+
+
+/* =========================
+   CONFETTI
+========================= */
+
+function createConfetti(amount=120){
+
+    for(let i=0;i<amount;i++){
+
+        confetti.push({
+
+            x:canvas.width/2,
+            y:250,
+
+            velocityX:(Math.random()-.5)*14,
+            velocityY:-Math.random()*13-5,
+
+            gravity:.25+Math.random()*.15,
+
+            size:4+Math.random()*7,
+
+            rotation:Math.random()*Math.PI*2,
+
+            rotationSpeed:(Math.random()-.5)*.3,
+
+            life:180+Math.random()*80,
+
+            color:[
+                "#ff3333",
+                "#ffd700",
+                "#33ccff",
+                "#66ff66",
+                "#ff66cc",
+                "#fff",
+                "#ff8c00",
+                "#9b59ff"
+            ][Math.floor(Math.random()*8)]
+        });
+    }
+}
+
+function updateConfetti(){
+
+    for(
+        let i=confetti.length-1;
+        i>=0;
+        i--
+    ){
+
+        const p = confetti[i];
+
+        p.x += p.velocityX;
+        p.y += p.velocityY;
+
+        p.velocityY += p.gravity;
+        p.velocityX *= .995;
+
+        p.rotation += p.rotationSpeed;
+
+        p.life--;
+
+        if(
+            p.life <= 0 ||
+            p.y > canvas.height+50
+        ){
+            confetti.splice(i,1);
+        }
+    }
+}
+
+function drawConfetti(){
+
+    for(const p of confetti){
+
+        ctx.save();
+
+        ctx.translate(p.x,p.y);
+        ctx.rotate(p.rotation);
+
+        ctx.fillStyle = p.color;
+
+        ctx.fillRect(
+            -p.size/2,
+            -p.size/2,
+            p.size,
+            p.size*.6
+        );
+
+        ctx.restore();
+    }
+}
+
+
+/* =========================
+   LEVELS
+========================= */
+
+const levels = [
+
+/* =========================
+   LEVEL 1
+========================= */
+
+{
+    name:"Den gröna dalen",
+
+    width:4200,
+
+    spawn:{
+        x:100,
+        y:300
+    },
+
+    platforms:[
+
+        {x:0,y:470,w:700,h:90},
+        {x:820,y:470,w:550,h:90},
+        {x:1490,y:470,w:500,h:90},
+        {x:2110,y:470,w:650,h:90},
+        {x:2900,y:470,w:500,h:90},
+        {x:3550,y:470,w:650,h:90},
+
+        {x:450,y:390,w:150,h:20},
+        {x:950,y:370,w:160,h:20},
+        {x:1250,y:320,w:140,h:20},
+        {x:1600,y:380,w:160,h:20},
+        {x:2250,y:360,w:170,h:20},
+        {x:2650,y:300,w:160,h:20},
+        {x:3100,y:360,w:160,h:20},
+        {x:3650,y:320,w:180,h:20}
+    ],
+
+    coins:[
+        {x:500,y:350},
+        {x:1000,y:330},
+        {x:1300,y:280},
+        {x:1650,y:340},
+        {x:2300,y:320},
+        {x:2700,y:260},
+        {x:3150,y:320},
+        {x:3700,y:280}
+    ],
+
+    enemies:[
+        {x:1100,y:430,w:35,h:40,speed:1.2},
+        {x:1750,y:430,w:35,h:40,speed:1.5},
+        {x:2500,y:430,w:35,h:40,speed:1.3},
+        {x:3200,y:430,w:35,h:40,speed:1.5}
+    ],
+
+    goal:{
+        x:3950,
+        y:390
+    }
+},
+
+
+/* =========================
+   LEVEL 2
+   HEMLIG VÄG
+========================= */
+
+{
+    name:"Kristallgrottan",
+
+    width:5000,
+
+    spawn:{
+        x:100,
+        y:300
+    },
+
+    platforms:[
+
+        /* MARK */
+
+        {x:0,y:470,w:650,h:90},
+        {x:800,y:470,w:420,h:90},
+        {x:1370,y:470,w:520,h:90},
+        {x:2040,y:470,w:430,h:90},
+        {x:2620,y:470,w:480,h:90},
+
+        /* HEMLIG DÖRR LIGGER PÅ DENNA MARKPLATTA */
+        {x:3250,y:470,w:550,h:90},
+
+        {x:3950,y:470,w:1050,h:90},
+
+
+        /* UPPHÖJDA PLATTFORMAR */
+
+        {x:400,y:370,w:160,h:20},
+        {x:900,y:350,w:170,h:20},
+        {x:1160,y:280,w:150,h:20},
+        {x:1480,y:350,w:170,h:20},
+        {x:1730,y:290,w:150,h:20},
+        {x:2140,y:350,w:160,h:20},
+        {x:2420,y:270,w:160,h:20},
+        {x:2720,y:350,w:160,h:20},
+        {x:3020,y:290,w:150,h:20},
+        {x:3400,y:350,w:160,h:20},
+        {x:3650,y:270,w:150,h:20},
+        {x:4100,y:340,w:170,h:20}
+    ],
+
+
+    coins:[
+        {x:450,y:330},
+        {x:950,y:310},
+        {x:1210,y:240},
+        {x:1520,y:310},
+        {x:1770,y:250},
+        {x:2180,y:310},
+        {x:2460,y:230},
+        {x:2760,y:310},
+        {x:3060,y:250},
+        {x:3440,y:310},
+        {x:3690,y:230},
+        {x:4140,y:300}
+    ],
+
+
+    enemies:[
+        {x:900,y:430,w:35,h:40,speed:1.5},
+        {x:1510,y:430,w:35,h:40,speed:1.7},
+        {x:2180,y:430,w:35,h:40,speed:1.6},
+        {x:2780,y:430,w:35,h:40,speed:1.8},
+        {x:3450,y:430,w:35,h:40,speed:1.7},
+        {x:4200,y:430,w:35,h:40,speed:1.9}
+    ],
+
+
+    /*
+        DETTA ÄR DET OSYNLIGA HEMLIGA BLOCKET.
+
+        Det syns aldrig på skärmen.
+
+        Spelaren kan hoppa upp från marken
+        och slå i blocket underifrån.
+
+        När blocket träffas kommer nyckeln ut.
+    */
+
+    secretBlock:{
+        x:1125,
+        y:220,
+        width:60,
+        height:20,
+        activated:false
+    },
+
+
+    /*
+        NYCKELN
+
+        Den börjar osynlig.
+
+        När blocket träffas:
+        - nyckeln visas
+        - den faller ner
+        - spelaren kan samla den
+    */
+
+    secretKey:{
+        x:1150,
+        y:185,
+
+        width:18,
+        height:25,
+
+        visible:false,
+        collected:false,
+
+        velocityY:0
+    },
+
+
+    /*
+        HEMLIGA DÖRREN
+
+        Viktigt:
+        Den ligger nu på säker mark.
+
+        Markplattformen går:
+        x 3250 → 3800
+
+        Dörren ligger:
+        x 3460 → 3515
+
+        Alltså inte i lava.
+    */
+
+    secretDoor:{
+        x:3460,
+        y:390,
+
+        width:55,
+        height:80,
+
+        opened:false
+    },
+
+
+    /*
+        HEMLIGA RUMMET
+    */
+
+    secretRoom:{
+        active:false,
+        chestOpened:false,
+        medalCollected:false
+    },
+
+
+    goal:{
+        x:4750,
+        y:390
+    }
+},
+
+
+/* =========================
+   LEVEL 3
+========================= */
+
+{
+    name:"Den mörka fästningen",
+
+    width:5000,
+
+    spawn:{
+        x:100,
+        y:300
+    },
+
+    platforms:[
+
+        {x:0,y:470,w:600,h:90},
+        {x:750,y:470,w:500,h:90},
+        {x:1400,y:470,w:500,h:90},
+        {x:2050,y:470,w:500,h:90},
+        {x:2700,y:470,w:500,h:90},
+        {x:3350,y:470,w:550,h:90},
+        {x:4050,y:470,w:950,h:90},
+
+        {x:350,y:350,w:150,h:20},
+        {x:850,y:320,w:150,h:20},
+        {x:1150,y:250,w:150,h:20},
+        {x:1500,y:350,w:150,h:20},
+        {x:1800,y:270,w:150,h:20},
+        {x:2150,y:350,w:150,h:20},
+        {x:2450,y:270,w:150,h:20},
+        {x:2800,y:350,w:150,h:20},
+        {x:3100,y:250,w:150,h:20},
+        {x:3500,y:350,w:150,h:20},
+        {x:3800,y:270,w:150,h:20},
+        {x:4250,y:340,w:150,h:20}
+    ],
+
+    coins:[
+        {x:400,y:310},
+        {x:900,y:280},
+        {x:1200,y:210},
+        {x:1550,y:310},
+        {x:1850,y:230},
+        {x:2200,y:310},
+        {x:2500,y:230},
+        {x:2850,y:310},
+        {x:3150,y:210},
+        {x:3550,y:310},
+        {x:3850,y:230},
+        {x:4300,y:300}
+    ],
+
+    enemies:[
+        {x:800,y:430,w:35,h:40,speed:1.7},
+        {x:1500,y:430,w:35,h:40,speed:1.8},
+        {x:2200,y:430,w:35,h:40,speed:1.9},
+        {x:2900,y:430,w:35,h:40,speed:1.8},
+        {x:3500,y:430,w:35,h:40,speed:2},
+        {x:4200,y:430,w:35,h:40,speed:2}
+    ],
+
+    boss:{
+        x:4550,
+        y:360,
+
+        width:90,
+        height:110,
+
+        health:5,
+        maxHealth:5,
+
+        direction:-1,
+        speed:1.2
+    },
+
+    goal:{
+        x:4850,
+        y:390
+    }
+}
+
+];
+
+
+/* =========================
+   LEVEL DATA
+========================= */
+
+let levelCoins = [];
+let levelEnemies = [];
+let boss = null;
+
+
+/* =========================
+   LOAD LEVEL
+========================= */
+
+function loadLevel(index){
+
+    currentLevel = index;
+
+    const level = levels[index];
+
+    player.x = level.spawn.x;
+    player.y = level.spawn.y;
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+
+    player.invincible = 0;
+
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
+
+    player.grounded = false;
+    player.jumpsLeft = 1;
+
+    levelCoins = level.coins.map(c => ({
+        ...c,
+        collected:false,
+        animation:Math.random()*Math.PI*2
+    }));
+
+    levelEnemies = level.enemies.map(e => ({
+        ...e,
+        startX:e.x,
+        direction:1,
+        alive:true
+    }));
+
+    boss = level.boss
+        ? {
+            ...level.boss,
+            health:level.boss.maxHealth,
+            direction:-1
+        }
+        : null;
+
+
+    /*
+        RESETTA ALL HEMLIG DATA
+    */
+
+    if(level.secretBlock){
+
+        level.secretBlock.activated = false;
+
+        level.secretKey.visible = false;
+        level.secretKey.collected = false;
+        level.secretKey.velocityY = 0;
+
+        level.secretDoor.opened = false;
+
+        level.secretRoom.active = false;
+        level.secretRoom.chestOpened = false;
+        level.secretRoom.medalCollected = false;
+    }
+
+
+    secretRoomActive = false;
+    secretMedalCollected = false;
+    secretChestOpened = false;
+
+    cameraX = 0;
+
+    levelElement.textContent = currentLevel + 1;
+
+    hideMessage();
+}
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function rectsOverlap(a,b){
+
+    return (
+        a.x < b.x+b.width &&
+        a.x+a.width > b.x &&
+        a.y < b.y+b.height &&
+        a.y+a.height > b.y
+    );
+}
+
+function clamp(v,min,max){
+
+    return Math.max(
+        min,
+        Math.min(max,v)
+    );
+}
+
+
+/* =========================
+   PLAYER UPDATE
+========================= */
+
+function updatePlayer(){
+
+    /*
+        Om spelaren är i det hemliga rummet
+        använder vi en separat kontroll.
+    */
+
+    if(secretRoomActive){
+
+        updateSecretRoomPlayer();
+
+        return;
+    }
+
+
+    if(
+        !gameRunning ||
+        levelCompleteTimer > 0
+    ){
+        return;
+    }
+
+
+    const level = levels[currentLevel];
+
+    const previousY = player.y;
+    const previousBottom = previousY + player.height;
+
+
+    /* COYOTE TIME */
+
+    if(player.grounded){
+
+        player.coyoteTimer = 8;
+        player.jumpsLeft = 1;
+
+    }else{
+
+        player.coyoteTimer--;
+    }
+
+
+    /* JUMP BUFFER */
+
+    if(jumpPressed){
+
+        player.jumpBufferTimer = 8;
+
+        jumpPressed = false;
+
+    }else{
+
+        player.jumpBufferTimer--;
+    }
+
+
+    /* MOVEMENT */
+
+    const left =
+        keys.KeyA ||
+        keys.ArrowLeft;
+
+    const right =
+        keys.KeyD ||
+        keys.ArrowRight;
+
+
+    if(left && !right){
+
+        player.velocityX =
+            Math.max(
+                -player.maxSpeed,
+                player.velocityX-player.acceleration
+            );
+
+        player.direction = -1;
+
+    }else if(right && !left){
+
+        player.velocityX =
+            Math.min(
+                player.maxSpeed,
+                player.velocityX+player.acceleration
+            );
+
+        player.direction = 1;
+
+    }else{
+
+        player.velocityX = 0;
+    }
+
+
+    /* JUMP */
+
+    if(
+        player.jumpBufferTimer > 0 &&
+        (
+            player.grounded ||
+            player.coyoteTimer > 0
+        )
+    ){
+
+        player.velocityY =
+            -player.jumpPower;
+
+        player.grounded = false;
+
+        player.coyoteTimer = 0;
+        player.jumpBufferTimer = 0;
+
+        playSound(
+            500,
+            .12,
+            "square",
+            .05
+        );
+    }
+
+
+    /* PHYSICS */
+
+    player.x += player.velocityX;
+
+    player.velocityY += player.gravity;
+
+
+    const jumpHeld =
+        keys.Space ||
+        keys.ArrowUp ||
+        keys.KeyW;
+
+
+    if(
+        !jumpHeld &&
+        player.velocityY < -5
+    ){
+
+        player.velocityY += .35;
+    }
+
+
+    player.y += player.velocityY;
+
+    player.grounded = false;
+
+
+    /* PLATFORM COLLISION */
+
+    for(const p of level.platforms){
+
+        const rightEdge =
+            player.x + player.width;
+
+        const playerBottom =
+            player.y + player.height;
+
+        const platformRight =
+            p.x + p.w;
+
+        const falling =
+            player.velocityY >= 0;
+
+        const horizontal =
+            rightEdge > p.x &&
+            player.x < platformRight;
+
+        const crossingTop =
+            previousBottom <= p.y &&
+            playerBottom >= p.y;
+
+
+        /* LAND ON PLATFORM */
+
+        if(
+            falling &&
+            horizontal &&
+            crossingTop
+        ){
+
+            player.y =
+                p.y-player.height;
+
+            player.velocityY = 0;
+
+            player.grounded = true;
+
+            player.jumpsLeft = 1;
+        }
+
+
+        /* HIT UNDERSIDE */
+
+        const hittingBottom =
+            player.velocityY < 0 &&
+            previousY >= p.y+p.h &&
+            player.y <= p.y+p.h;
+
+
+        if(
+            hittingBottom &&
+            horizontal
+        ){
+
+            player.y =
+                p.y+p.h;
+
+            player.velocityY = 0;
+        }
+    }
+
+
+    /* WORLD BOUNDARIES */
+
+    player.x = clamp(
+        player.x,
+        0,
+        level.width-player.width
+    );
+
+
+    /* FALL INTO LAVA */
+
+    if(
+        player.y >
+        canvas.height+80
+    ){
+
+        loseLife();
+
+        return;
+    }
+
+
+    /* COINS */
+
+    for(const coin of levelCoins){
+
+        if(coin.collected) continue;
+
+        const box = {
+            x:coin.x-12,
+            y:coin.y-12,
+            width:24,
+            height:24
+        };
+
+        if(rectsOverlap(player,box)){
+
+            coin.collected = true;
+
+            coins++;
+            score += 100;
+
+            playSound(
+                850,
+                .08,
+                "square",
+                .04
+            );
+        }
+    }
+
+
+    /* ENEMIES */
+
+    for(const enemy of levelEnemies){
+
+        if(!enemy.alive) continue;
+
+        enemy.x +=
+            enemy.speed *
+            enemy.direction;
+
+
+        if(
+            Math.abs(
+                enemy.x-enemy.startX
+            ) > 90
+        ){
+
+            enemy.direction *= -1;
+        }
+
+
+        const box = {
+            x:enemy.x,
+            y:enemy.y,
+            width:enemy.w,
+            height:enemy.h
+        };
+
+
+        if(rectsOverlap(player,box)){
+
+            const stomp =
+                player.velocityY > 0 &&
+                player.y+
+                player.height-
+                enemy.y < 20;
+
+
+            if(stomp){
+
+                enemy.alive = false;
+
+                player.velocityY = -9;
+
+                score += 250;
+
+                playSound(
+                    220,
+                    .12,
+                    "square",
+                    .05
+                );
+
+            }else{
+
+                hurtPlayer();
+            }
+        }
+    }
+
+
+    /* BOSS */
+
+    if(
+        boss &&
+        boss.health > 0
+    ){
+
+        boss.x +=
+            boss.speed *
+            boss.direction;
+
+
+        if(
+            boss.x < 4300 ||
+            boss.x > 4750
+        ){
+
+            boss.direction *= -1;
+        }
+
+
+        if(rectsOverlap(player,boss)){
+
+            const stomp =
+                player.velocityY > 0 &&
+                player.y+
+                player.height-
+                boss.y < 25;
+
+
+            if(stomp){
+
+                boss.health--;
+
+                player.velocityY = -11;
+
+                score += 500;
+
+                playSound(
+                    180,
+                    .2,
+                    "sawtooth",
+                    .07
+                );
+
+
+                if(boss.health <= 0){
+
+                    score += 2000;
+
+                    createConfetti(80);
+
+                    playSound(
+                        100,
+                        .5,
+                        "sawtooth",
+                        .08
+                    );
+                }
+
+            }else{
+
+                hurtPlayer();
+            }
+        }
+    }
+
+
+    /* LEVEL 2 SECRET */
+
+    if(currentLevel === 1){
+
+        updateLevel2Secret(
+            level,
+            previousY
+        );
+    }
+
+
+    /* GOAL */
+
+    const goal = level.goal;
+
+    const goalBox = {
+        x:goal.x,
+        y:goal.y,
+        width:40,
+        height:80
+    };
+
+
+    if(
+        rectsOverlap(
+            player,
+            goalBox
+        ) &&
+        (
+            !boss ||
+            boss.health <= 0
+        )
+    ){
+
+        completeLevel();
+    }
+
+
+    /* WALK ANIMATION */
+
+    if(
+        Math.abs(player.velocityX) > .1 &&
+        player.grounded
+    ){
+
+        player.walkAnimation += .2;
+
+    }else{
+
+        player.walkAnimation = 0;
+    }
+
+
+    if(player.invincible > 0){
+
+        player.invincible--;
+    }
+}
+
+
+/* =========================
+   LEVEL 2 SECRET
+========================= */
+
+function updateLevel2Secret(
+    level,
+    previousY
+){
+
+    const block =
+        level.secretBlock;
+
+    const key =
+        level.secretKey;
+
+    const door =
+        level.secretDoor;
+
+
+    /*
+        OSYNLIGA BLOCKET
+
+        Spelaren måste träffa blocket
+        underifrån när spelaren hoppar.
+    */
+
+    const horizontal =
+        player.x+player.width >
+        block.x &&
+        player.x <
+        block.x+block.width;
+
+
+    const underside =
+        player.velocityY < 0 &&
+        previousY >=
+        block.y+block.height &&
+        player.y <=
+        block.y+block.height;
+
+
+    if(
+        !block.activated &&
+        horizontal &&
+        underside
+    ){
+
+        block.activated = true;
+
+        key.visible = true;
+
+        key.x =
+            block.x+21;
+
+        key.y =
+            block.y-28;
+
+        key.velocityY = -3;
+
+        score += 300;
+
+        playSound(
+            700,
+            .12,
+            "square",
+            .05
+        );
+    }
+
+
+    /*
+        NYCKEL FALLER
+    */
+
+    if(
+        key.visible &&
+        !key.collected
+    ){
+
+        if(key.y < 420){
+
+            key.velocityY += .25;
+
+            key.y +=
+                key.velocityY;
+        }
+
+
+        const keyBox = {
+            x:key.x-8,
+            y:key.y-10,
+            width:34,
+            height:38
+        };
+
+
+        if(
+            rectsOverlap(
+                player,
+                keyBox
+            )
+        ){
+
+            key.collected = true;
+
+            score += 500;
+
+            playSound(
+                1000,
+                .15,
+                "square",
+                .05
+            );
+        }
+    }
+
+
+    /*
+        HEMLIGA DÖRREN
+    */
+
+    const nearDoor =
+        rectsOverlap(
+            player,
+            {
+                x:door.x-35,
+                y:door.y-10,
+                width:door.width+70,
+                height:door.height+20
+            }
+        );
+
+
+    /*
+        FÖRSTA E:
+        ÖPPNA DÖRREN
+    */
+
+    if(
+        !door.opened &&
+        key.collected &&
+        nearDoor
+    ){
+
+        if(interactPressed){
+
+            door.opened = true;
+
+            interactPressed = false;
+
+            playSound(
+                650,
+                .25,
+                "square",
+                .06
+            );
+        }
+    }
+
+
+    /*
+        ANDRA E:
+        GÅ IN I DET HEMLIGA RUMMET
+    */
+
+    else if(
+        door.opened &&
+        nearDoor &&
+        interactPressed
+    ){
+
+        interactPressed = false;
+
+        enterSecretRoom();
+
+        return;
+    }
+}
+
+
+/* =========================
+   SECRET ROOM PLAYER
+========================= */
+
+function updateSecretRoomPlayer(){
+
+    if(!secretRoomActive){
+        return;
+    }
+
+
+    const left =
+        keys.KeyA ||
+        keys.ArrowLeft;
+
+    const right =
+        keys.KeyD ||
+        keys.ArrowRight;
+
+
+    if(left && !right){
+
+        player.x -= 4;
+
+        player.direction = -1;
+
+    }else if(right && !left){
+
+        player.x += 4;
+
+        player.direction = 1;
+    }
+
+
+    player.x = clamp(
+        player.x,
+        110,
+        850
+    );
+
+
+    player.y = 350;
+
+
+    const level =
+        levels[currentLevel];
+
+
+    /*
+        E används i hemliga rummet
+    */
+
+    if(interactPressed){
+
+        interactPressed = false;
+
+
+        /*
+            UTGÅNG
+        */
+
+        if(player.x < 220){
+
+            exitSecretRoom();
+
+            return;
+        }
+
+
+        /*
+            KISTA
+        */
+
+        if(
+            !level.secretRoom.chestOpened &&
+            player.x > 385 &&
+            player.x < 590
+        ){
+
+            openSecretChest();
+
+            return;
+        }
+    }
+}
+
+
+/* =========================
+   DAMAGE
+========================= */
+
+function hurtPlayer(){
+
+    if(player.invincible > 0){
+        return;
+    }
+
+
+    lives--;
+
+    playSound(
+        120,
+        .25,
+        "sawtooth",
+        .06
+    );
+
+
+    player.invincible = 100;
+
+    livesElement.textContent =
+        lives;
+
+
+    if(lives <= 0){
+
+        gameOver();
+
+        return;
+    }
+
+
+    const level =
+        levels[currentLevel];
+
+
+    player.x =
+        level.spawn.x;
+
+    player.y =
+        level.spawn.y;
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+}
+
+
+function loseLife(){
+
+    lives--;
+
+    livesElement.textContent =
+        lives;
+
+
+    playSound(
+        100,
+        .35,
+        "sawtooth",
+        .07
+    );
+
+
+    /*
+        Små orange/gula partiklar
+        när spelaren faller i lava
+    */
+
+    for(let i=0;i<20;i++){
+
+        confetti.push({
+
+            x:
+                player.x-
+                cameraX+
+                player.width/2,
+
+            y:
+                player.y,
+
+            velocityX:
+                (Math.random()-.5)*6,
+
+            velocityY:
+                -Math.random()*5,
+
+            gravity:.18,
+
+            size:
+                2+
+                Math.random()*3,
+
+            rotation:0,
+            rotationSpeed:0,
+
+            life:35,
+
+            color:
+                Math.random()>.5
+                ? "#ff6600"
+                : "#ffcc00"
+        });
+    }
+
+
+    if(lives <= 0){
+
+        gameOver();
+
+        return;
+    }
+
+
+    const level =
+        levels[currentLevel];
+
+
+    player.x =
+        level.spawn.x;
+
+    player.y =
+        level.spawn.y;
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+
+    player.invincible = 100;
+}
+
+
+/* =========================
+   LAVA
+========================= */
+
+function drawLava(){
+
+    const level =
+        levels[currentLevel];
+
+    const lavaTop = 470;
+
+
+    const ground =
+        level.platforms
+        .filter(
+            p =>
+                p.y === lavaTop &&
+                p.h >= 50
+        )
+        .sort(
+            (a,b)=>a.x-b.x
+        );
+
+
+    let end = 0;
+
+
+    for(const p of ground){
+
+        if(p.x > end){
+
+            drawLavaHole(
+                end,
+                p.x
+            );
+        }
+
+        end =
+            p.x+p.w;
+    }
+
+
+    if(level.width > end){
+
+        drawLavaHole(
+            end,
+            level.width
+        );
+    }
+}
+
+
+function drawLavaHole(
+    worldStart,
+    worldEnd
+){
+
+    const s =
+        worldStart-cameraX;
+
+    const e =
+        worldEnd-cameraX;
+
+
+    if(
+        e < 0 ||
+        s > canvas.width
+    ){
+
+        return;
+    }
+
+
+    const vs =
+        Math.max(0,s);
+
+    const ve =
+        Math.min(
+            canvas.width,
+            e
+        );
+
+    const w =
+        ve-vs;
+
+
+    const gradient =
+        ctx.createLinearGradient(
+            0,
+            470,
+            0,
+            canvas.height
+        );
+
+
+    gradient.addColorStop(
+        0,
+        "#ff6500"
+    );
+
+    gradient.addColorStop(
+        .2,
+        "#e52d00"
+    );
+
+    gradient.addColorStop(
+        .65,
+        "#850b00"
+    );
+
+    gradient.addColorStop(
+        1,
+        "#220000"
+    );
+
+
+    ctx.fillStyle =
+        gradient;
+
+    ctx.fillRect(
+        vs,
+        470,
+        w,
+        canvas.height-470
+    );
+
+
+    const glow =
+        ctx.createLinearGradient(
+            0,
+            450,
+            0,
+            485
+        );
+
+
+    glow.addColorStop(
+        0,
+        "rgba(255,60,0,0)"
+    );
+
+    glow.addColorStop(
+        .5,
+        "rgba(255,100,0,.8)"
+    );
+
+    glow.addColorStop(
+        1,
+        "rgba(255,30,0,0)"
+    );
+
+
+    ctx.fillStyle =
+        glow;
+
+    ctx.fillRect(
+        vs,
+        450,
+        w,
+        40
+    );
+
+
+    const time =
+        Date.now()*.003;
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        vs,
+        470
+    );
+
+
+    for(
+        let x=vs-20;
+        x<=ve+20;
+        x+=15
+    ){
+
+        const wave =
+            Math.sin(
+                x*.035+time
+            )*4
+            +
+            Math.sin(
+                x*.015-time*1.4
+            )*3;
+
+
+        ctx.lineTo(
+            x,
+            470+wave
+        );
+    }
+
+
+    ctx.lineTo(
+        ve,
+        500
+    );
+
+    ctx.lineTo(
+        vs,
+        500
+    );
+
+    ctx.closePath();
+
+
+    ctx.fillStyle =
+        "#ff4800";
+
+    ctx.fill();
+
+
+    for(
+        let x=vs;
+        x<ve;
+        x+=45
+    ){
+
+        const wave =
+            Math.sin(
+                x*.035+time
+            )*4;
+
+
+        ctx.fillStyle =
+            "#ffb000";
+
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            x+10,
+            472+wave,
+            12,
+            3,
+            0,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+    }
+}
+
+
+/* =========================
+   BACKGROUND
+========================= */
+
+function drawBackground(){
+
+    const level =
+        levels[currentLevel];
+
+
+    const gradient =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+
+    if(currentLevel === 0){
+
+        gradient.addColorStop(
+            0,
+            "#70c5ff"
+        );
+
+        gradient.addColorStop(
+            1,
+            "#d6f5ff"
+        );
+
+    }else if(currentLevel === 1){
+
+        gradient.addColorStop(
+            0,
+            "#151c3b"
+        );
+
+        gradient.addColorStop(
+            1,
+            "#36245e"
+        );
+
+    }else{
+
+        gradient.addColorStop(
+            0,
+            "#100f1c"
+        );
+
+        gradient.addColorStop(
+            1,
+            "#241529"
+        );
+    }
+
+
+    ctx.fillStyle =
+        gradient;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.fillStyle =
+        currentLevel===0
+        ? "#6aa66a"
+        : "#29233f";
+
+
+    for(
+        let x=-500;
+        x<level.width+500;
+        x+=350
+    ){
+
+        const sx =
+            x-cameraX*.3;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            sx,
+            470
+        );
+
+        ctx.lineTo(
+            sx+175,
+            250
+        );
+
+        ctx.lineTo(
+            sx+350,
+            470
+        );
+
+        ctx.fill();
+    }
+
+
+    ctx.fillStyle =
+        currentLevel===0
+        ? "#477047"
+        : "#1b1728";
+
+
+    for(
+        let x=-700;
+        x<level.width+700;
+        x+=500
+    ){
+
+        const sx =
+            x-cameraX*.15;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            sx,
+            470
+        );
+
+        ctx.lineTo(
+            sx+250,
+            300
+        );
+
+        ctx.lineTo(
+            sx+500,
+            470
+        );
+
+        ctx.fill();
+    }
+}
+
+
+/* =========================
+   PLATFORMS
+========================= */
+
+function drawPlatforms(){
+
+    const level =
+        levels[currentLevel];
+
+
+    for(const p of level.platforms){
+
+        const x =
+            p.x-cameraX;
+
+
+        if(
+            x+p.w < 0 ||
+            x > canvas.width
+        ){
+
+            continue;
+        }
+
+
+        ctx.fillStyle =
+            currentLevel===0
+            ? "#4f3423"
+            : "#272027";
+
+
+        ctx.fillRect(
+            x,
+            p.y,
+            p.w,
+            p.h
+        );
+
+
+        ctx.fillStyle =
+            currentLevel===0
+            ? "#3fa34d"
+            : "#8a2525";
+
+
+        ctx.fillRect(
+            x,
+            p.y,
+            p.w,
+            8
+        );
+
+
+        ctx.fillStyle =
+            currentLevel===0
+            ? "#65412b"
+            : "#392c38";
+
+
+        for(
+            let i=0;
+            i<p.w;
+            i+=35
+        ){
+
+            ctx.fillRect(
+                x+i+5,
+                p.y+15,
+                20,
+                5
+            );
+        }
+    }
+}
+
+
+/* =========================
+   COINS
+========================= */
+
+function drawCoins(){
+
+    for(const c of levelCoins){
+
+        if(c.collected){
+            continue;
+        }
+
+
+        c.animation += .08;
+
+
+        const x =
+            c.x-cameraX;
+
+
+        const scale =
+            .75+
+            Math.abs(
+                Math.sin(
+                    c.animation
+                )
+            )*.25;
+
+
+        ctx.save();
+
+        ctx.translate(
+            x,
+            c.y
+        );
+
+        ctx.scale(
+            scale,
+            1
+        );
+
+
+        ctx.fillStyle =
+            "#ffd700";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            0,
+            0,
+            12,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+
+        ctx.strokeStyle =
+            "#ff9d00";
+
+        ctx.lineWidth = 3;
+
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "#fff4a3";
+
+        ctx.fillRect(
+            -3,
+            -7,
+            4,
+            8
+        );
+
+
+        ctx.restore();
+    }
+}
+
+
+/* =========================
+   ENEMIES
+========================= */
+
+function drawEnemies(){
+
+    for(const e of levelEnemies){
+
+        if(!e.alive){
+            continue;
+        }
+
+
+        const x =
+            e.x-cameraX;
+
+        const y =
+            e.y;
+
+        const w =
+            e.w;
+
+        const h =
+            e.h;
+
+
+        ctx.fillStyle =
+            "rgba(0,0,0,.3)";
+
+        ctx.fillRect(
+            x+3,
+            y+h-3,
+            w,
+            6
+        );
+
+
+        ctx.fillStyle =
+            "#7d24a8";
+
+        ctx.fillRect(
+            x,
+            y,
+            w,
+            h
+        );
+
+
+        ctx.fillStyle =
+            "#54136f";
+
+        ctx.fillRect(
+            x,
+            y,
+            5,
+            h
+        );
+
+        ctx.fillRect(
+            x+w-5,
+            y,
+            5,
+            h
+        );
+
+
+        ctx.fillStyle =
+            "white";
+
+        ctx.fillRect(
+            x+6,
+            y+8,
+            8,
+            8
+        );
+
+        ctx.fillRect(
+            x+w-14,
+            y+8,
+            8,
+            8
+        );
+
+
+        ctx.fillStyle =
+            "black";
+
+        ctx.fillRect(
+            x+9,
+            y+10,
+            4,
+            5
+        );
+
+        ctx.fillRect(
+            x+w-11,
+            y+10,
+            4,
+            5
+        );
+
+
+        ctx.fillStyle =
+            "#23051f";
+
+        ctx.fillRect(
+            x+6,
+            y+25,
+            w-12,
+            8
+        );
+
+
+        ctx.fillStyle =
+            "white";
+
+
+        for(let i=0;i<3;i++){
+
+            ctx.fillRect(
+                x+9+i*7,
+                y+25,
+                4,
+                6
+            );
+        }
+
+
+        ctx.fillStyle =
+            "#3b104e";
+
+        ctx.fillRect(
+            x+3,
+            y+h-6,
+            10,
+            7
+        );
+
+        ctx.fillRect(
+            x+w-13,
+            y+h-6,
+            10,
+            7
+        );
+    }
+}
+
+
+/* =========================
+   BOSS
+========================= */
+
+function drawBoss(){
+
+    if(
+        !boss ||
+        boss.health <= 0
+    ){
+
+        return;
+    }
+
+
+    const x =
+        boss.x-cameraX;
+
+    const y =
+        boss.y;
+
+
+    ctx.shadowColor =
+        "#ff0000";
+
+    ctx.shadowBlur = 20;
+
+
+    ctx.fillStyle =
+        "#4d0a0a";
+
+    ctx.fillRect(
+        x,
+        y,
+        boss.width,
+        boss.height
+    );
+
+
+    ctx.shadowBlur = 0;
+
+
+    ctx.fillStyle =
+        "#d8d8d8";
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x+15,
+        y+10
+    );
+
+    ctx.lineTo(
+        x,
+        y-25
+    );
+
+    ctx.lineTo(
+        x+30,
+        y+5
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x+boss.width-15,
+        y+10
+    );
+
+    ctx.lineTo(
+        x+boss.width,
+        y-25
+    );
+
+    ctx.lineTo(
+        x+boss.width-30,
+        y+5
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle =
+        "#ff2b00";
+
+    ctx.fillRect(
+        x+18,
+        y+30,
+        15,
+        8
+    );
+
+    ctx.fillRect(
+        x+57,
+        y+30,
+        15,
+        8
+    );
+
+
+    ctx.fillStyle =
+        "#000";
+
+    ctx.fillRect(
+        x+20,
+        y+65,
+        50,
+        20
+    );
+
+
+    ctx.fillStyle =
+        "white";
+
+
+    for(let i=0;i<5;i++){
+
+        ctx.fillRect(
+            x+24+i*10,
+            y+65,
+            5,
+            10
+        );
+    }
+
+
+    /* BOSS HEALTH BAR */
+
+    ctx.fillStyle =
+        "#222";
+
+    ctx.fillRect(
+        x,
+        y-45,
+        boss.width,
+        10
+    );
+
+
+    ctx.fillStyle =
+        "#ff2222";
+
+    ctx.fillRect(
+        x,
+        y-45,
+        boss.width*
+        (
+            boss.health/
+            boss.maxHealth
+        ),
+        10
+    );
+}
+
+
+/* =========================
+   GOAL / FLAG
+========================= */
+
+function drawGoal(){
+
+    const goal =
+        levels[currentLevel].goal;
+
+    const x =
+        goal.x-cameraX;
+
+    const y =
+        goal.y;
+
+
+    const celebrating =
+        levelCompleteTimer > 0;
+
+
+    const wave =
+        Math.sin(
+            Date.now()*.008
+        )*4;
+
+
+    if(celebrating){
+
+        ctx.shadowColor =
+            "#ffd700";
+
+        ctx.shadowBlur = 25;
+    }
+
+
+    ctx.fillStyle =
+        "#d5d5d5";
+
+    ctx.fillRect(
+        x+17,
+        y,
+        6,
+        80
+    );
+
+
+    ctx.shadowBlur = 0;
+
+
+    ctx.fillStyle =
+        "#ffd700";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x+20,
+        y-3,
+        6,
+        0,
+        Math.PI*2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle =
+        currentLevel===2
+        ? "#ff3333"
+        : "#fff";
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x+23,
+        y+5
+    );
+
+    ctx.quadraticCurveTo(
+        x+43,
+        y+12+wave,
+        x+63,
+        y+20
+    );
+
+    ctx.quadraticCurveTo(
+        x+43,
+        y+28-wave,
+        x+23,
+        y+35
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+}
+
+
+/* =========================
+   SECRET OBJECTS
+========================= */
+
+function drawSecretObjects(){
+
+    if(currentLevel !== 1){
+        return;
+    }
+
+
+    const level =
+        levels[currentLevel];
+
+    const key =
+        level.secretKey;
+
+    const door =
+        level.secretDoor;
+
+
+    /*
+        NYCKEL
+    */
+
+    if(
+        key.visible &&
+        !key.collected
+    ){
+
+        const x =
+            key.x-cameraX;
+
+        const y =
+            key.y;
+
+
+        ctx.save();
+
+
+        ctx.shadowColor =
+            "#ffd700";
+
+        ctx.shadowBlur = 15;
+
+
+        ctx.strokeStyle =
+            "#ffd700";
+
+        ctx.lineWidth = 4;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            7,
+            0,
+            Math.PI*2
+        );
+
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "#ffd700";
+
+        ctx.fillRect(
+            x+5,
+            y-2,
+            18,
+            5
+        );
+
+        ctx.fillRect(
+            x+17,
+            y+3,
+            4,
+            6
+        );
+
+        ctx.fillRect(
+            x+23,
+            y+3,
+            4,
+            6
+        );
+
+
+        ctx.restore();
+    }
+
+
+    /*
+        DÖRR
+    */
+
+    const dx =
+        door.x-cameraX;
+
+
+    if(door.opened){
+
+        ctx.fillStyle =
+            "#251508";
+
+    }else{
+
+        ctx.fillStyle =
+            "#111";
+    }
+
+
+    ctx.fillRect(
+        dx,
+        door.y,
+        door.width,
+        door.height
+    );
+
+
+    ctx.strokeStyle =
+        "#8a6a3a";
+
+    ctx.lineWidth = 5;
+
+    ctx.strokeRect(
+        dx,
+        door.y,
+        door.width,
+        door.height
+    );
+
+
+    ctx.fillStyle =
+        "#ffd700";
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        dx+42,
+        door.y+42,
+        5,
+        0,
+        Math.PI*2
+    );
+
+    ctx.fill();
+
+
+    /*
+        INTERAKTIONS-TEXT
+    */
+
+    ctx.textAlign =
+        "center";
+
+    ctx.font =
+        "bold 13px Arial";
+
+
+    if(!door.opened){
+
+        ctx.fillStyle =
+            "#ffcc00";
+
+        ctx.fillText(
+            "🔒",
+            dx+27,
+            door.y-10
+        );
+
+    }else if(
+        level.secretKey.collected
+    ){
+
+        ctx.fillStyle =
+            "#ffd700";
+
+        ctx.fillText(
+            "E",
+            dx+27,
+            door.y-10
+        );
+    }
+}
+
+
+/* =========================
+   PLAYER DRAW
+========================= */
+
+function drawPlayer(){
+
+    if(
+        player.invincible > 0 &&
+        Math.floor(
+            player.invincible/5
+        )%2===0
+    ){
+
+        return;
+    }
+
+
+    const x =
+        player.x-cameraX;
+
+    const y =
+        player.y;
+
+
+    const bob =
+        player.grounded
+        ? Math.sin(
+            player.walkAnimation
+        )*2
+        : 0;
+
+
+    ctx.save();
+
+    ctx.translate(
+        x,
+        y+bob
+    );
+
+
+    /* KROPP */
+
+    ctx.fillStyle =
+        "#e53935";
+
+    ctx.fillRect(
+        5,
+        15,
+        24,
+        28
+    );
+
+
+    /* ANSIKTE */
+
+    ctx.fillStyle =
+        "#f2b27a";
+
+    ctx.fillRect(
+        7,
+        0,
+        20,
+        20
+    );
+
+
+    /* HÅR */
+
+    ctx.fillStyle =
+        "#4a2415";
+
+    ctx.fillRect(
+        6,
+        0,
+        22,
+        7
+    );
+
+
+    /* MÖSSA */
+
+    ctx.fillStyle =
+        "#e53935";
+
+    ctx.fillRect(
+        4,
+        -4,
+        25,
+        7
+    );
+
+
+    /* ÖGA */
+
+    ctx.fillStyle =
+        "#111";
+
+
+    if(player.direction === 1){
+
+        ctx.fillRect(
+            22,
+            8,
+            3,
+            3
+        );
+
+    }else{
+
+        ctx.fillRect(
+            9,
+            8,
+            3,
+            3
+        );
+    }
+
+
+    /* ARMAR */
+
+    ctx.fillStyle =
+        "#f2b27a";
+
+    ctx.fillRect(
+        0,
+        18,
+        7,
+        17
+    );
+
+    ctx.fillRect(
+        27,
+        18,
+        7,
+        17
+    );
+
+
+    /* BEN */
+
+    ctx.fillStyle =
+        "#2455a4";
+
+    ctx.fillRect(
+        7,
+        40,
+        9,
+        8
+    );
+
+    ctx.fillRect(
+        18,
+        40,
+        9,
+        8
+    );
+
+
+    ctx.restore();
+}
+
+
+/* =========================
+   SECRET ROOM
+========================= */
+
+function enterSecretRoom(){
+
+    if(secretRoomActive){
+        return;
+    }
+
+
+    secretRoomActive = true;
+
+    gameRunning = false;
+
+
+    levels[
+        currentLevel
+    ].secretRoom.active = true;
+
+
+    player.x = 220;
+    player.y = 350;
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+
+
+    cameraX = 0;
+
+
+    playSound(
+        500,
+        .2,
+        "square",
+        .05
+    );
+}
+
+
+function exitSecretRoom(){
+
+    secretRoomActive = false;
+
+    gameRunning = true;
+
+
+    levels[
+        currentLevel
+    ].secretRoom.active = false;
+
+
+    const door =
+        levels[
+            currentLevel
+        ].secretDoor;
+
+
+    /*
+        Placera spelaren direkt utanför dörren
+    */
+
+    player.x =
+        door.x+
+        door.width+
+        15;
+
+    player.y =
+        390;
+
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+
+
+    cameraX =
+        clamp(
+            player.x-
+            canvas.width*.4,
+            0,
+            levels[
+                currentLevel
+            ].width-
+            canvas.width
+        );
+
+
+    playSound(
+        350,
+        .15,
+        "square",
+        .05
+    );
+}
+
+
+/* =========================
+   CHEST
+========================= */
+
+function openSecretChest(){
+
+    const level =
+        levels[currentLevel];
+
+
+    if(
+        level.secretRoom.chestOpened
+    ){
+
+        return;
+    }
+
+
+    level.secretRoom.chestOpened = true;
+
+    secretChestOpened = true;
+
+
+    /*
+        KISTAN GER +2000
+    */
+
+    score += 2000;
+
+
+    createConfetti(120);
+
+
+    playSound(
+        900,
+        .15,
+        "square",
+        .06
+    );
+
+
+    /*
+        EFTER EN KORT STUND
+        KOMMER GULDMEDALJEN
+    */
+
+    setTimeout(()=>{
+
+        level.secretRoom.medalCollected = true;
+
+        secretMedalCollected = true;
+
+
+        /*
+            GULDMEDALJEN GER +5000
+        */
+
+        score += 5000;
+
+
+        createConfetti(180);
+
+
+        playSound(
+            1200,
+            .25,
+            "sine",
+            .07
+        );
+
+    },800);
+}
+
+
+/* =========================
+   SECRET ROOM DRAW
+========================= */
+
+function drawSecretRoom(){
+
+    const level =
+        levels[currentLevel];
+
+
+    /*
+        BAKGRUND
+    */
+
+    const gradient =
+        ctx.createLinearGradient(
+            0,
+            0,
+            0,
+            canvas.height
+        );
+
+
+    gradient.addColorStop(
+        0,
+        "#080812"
+    );
+
+    gradient.addColorStop(
+        1,
+        "#25102d"
+    );
+
+
+    ctx.fillStyle =
+        gradient;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    /*
+        RUM
+    */
+
+    ctx.fillStyle =
+        "#30203a";
+
+    ctx.fillRect(
+        80,
+        80,
+        840,
+        400
+    );
+
+
+    ctx.fillStyle =
+        "#17131b";
+
+    ctx.fillRect(
+        80,
+        420,
+        840,
+        60
+    );
+
+    ctx.fillRect(
+        80,
+        80,
+        840,
+        35
+    );
+
+
+    /*
+        PELARE
+    */
+
+    ctx.fillStyle =
+        "#5b3970";
+
+    ctx.fillRect(
+        130,
+        150,
+        12,
+        180
+    );
+
+    ctx.fillRect(
+        850,
+        150,
+        12,
+        180
+    );
+
+
+    /*
+        TITEL
+    */
+
+    ctx.textAlign =
+        "center";
+
+    ctx.fillStyle =
+        "#ffd700";
+
+    ctx.font =
+        "bold 32px Arial";
+
+
+    ctx.fillText(
+        "HEMLIGA RUMMET",
+        500,
+        155
+    );
+
+
+    ctx.font =
+        "18px Arial";
+
+    ctx.fillStyle =
+        "#aaa";
+
+
+    ctx.fillText(
+        "Du hittade den gömda skatten...",
+        500,
+        185
+    );
+
+
+    /*
+        KISTA
+    */
+
+    const chestX = 430;
+    const chestY = 330;
+
+
+    ctx.fillStyle =
+        "rgba(0,0,0,.4)";
+
+    ctx.fillRect(
+        chestX+5,
+        chestY+55,
+        140,
+        15
+    );
+
+
+    ctx.fillStyle =
+        "#8b4a20";
+
+    ctx.fillRect(
+        chestX,
+        chestY,
+        140,
+        60
+    );
+
+
+    if(
+        !level.secretRoom.chestOpened
+    ){
+
+        /*
+            STÄNGD KISTA
+        */
+
+        ctx.fillStyle =
+            "#a8662b";
+
+        ctx.fillRect(
+            chestX,
+            chestY-20,
+            140,
+            25
+        );
+
+
+        ctx.fillStyle =
+            "#d39b35";
+
+        ctx.fillRect(
+            chestX+8,
+            chestY+5,
+            8,
+            50
+        );
+
+        ctx.fillRect(
+            chestX+124,
+            chestY+5,
+            8,
+            50
+        );
+
+
+        ctx.fillStyle =
+            "#ffd700";
+
+        ctx.fillRect(
+            chestX+62,
+            chestY+12,
+            16,
+            20
+        );
+
+    }else{
+
+        /*
+            ÖPPEN KISTA
+        */
+
+        ctx.fillStyle =
+            "#a8662b";
+
+        ctx.fillRect(
+            chestX,
+            chestY-55,
+            140,
+            25
+        );
+
+
+        /*
+            GULDMEDALJ
+        */
+
+        ctx.shadowColor =
+            "#ffd700";
+
+        ctx.shadowBlur = 25;
+
+
+        ctx.fillStyle =
+            "#ffd700";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            chestX+70,
+            chestY-5,
+            25,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+
+        ctx.shadowBlur = 0;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            chestX+70,
+            chestY-5,
+            20,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+
+
+        ctx.strokeStyle =
+            "#fff2a8";
+
+        ctx.lineWidth = 4;
+
+        ctx.stroke();
+
+
+        ctx.fillStyle =
+            "#8a5a00";
+
+        ctx.font =
+            "bold 18px Arial";
+
+
+        ctx.fillText(
+            "★",
+            chestX+70,
+            chestY+2
+        );
+    }
+
+
+    /*
+        TEXT
+    */
+
+    ctx.fillStyle =
+        "#fff";
+
+    ctx.font =
+        "16px Arial";
+
+
+    if(
+        !level.secretRoom.chestOpened
+    ){
+
+        ctx.fillText(
+            "Gå fram till kistan och tryck E",
+            500,
+            520
+        );
+
+    }else if(
+        !level.secretRoom.medalCollected
+    ){
+
+        ctx.fillText(
+            "🥇 Guldmedaljen är din!",
+            500,
+            520
+        );
+
+    }else{
+
+        ctx.fillText(
+            "🥇 Guldmedalj erhållen! +5000 poäng",
+            500,
+            520
+        );
+    }
+
+
+    /*
+        UTGÅNG
+    */
+
+    ctx.fillStyle =
+        "#555";
+
+    ctx.fillRect(
+        120,
+        365,
+        70,
+        55
+    );
+
+
+    ctx.fillStyle =
+        "#ddd";
+
+    ctx.font =
+        "14px Arial";
+
+
+    ctx.fillText(
+        "UT",
+        155,
+        397
+    );
+
+
+    if(player.x < 230){
+
+        ctx.fillStyle =
+            "#ffd700";
+
+        ctx.font =
+            "bold 14px Arial";
+
+
+        ctx.fillText(
+            "E = Gå ut",
+            190,
+            345
+        );
+    }
+
+
+    drawSecretRoomPlayer();
+}
+
+
+/* =========================
+   SECRET ROOM PLAYER
+========================= */
+
+function drawSecretRoomPlayer(){
+
+    const x =
+        player.x;
+
+    const y =
+        player.y;
+
+
+    ctx.save();
+
+    ctx.translate(
+        x,
+        y
+    );
+
+
+    ctx.fillStyle =
+        "#e53935";
+
+    ctx.fillRect(
+        5,
+        15,
+        24,
+        28
+    );
+
+
+    ctx.fillStyle =
+        "#f2b27a";
+
+    ctx.fillRect(
+        7,
+        0,
+        20,
+        20
+    );
+
+
+    ctx.fillStyle =
+        "#4a2415";
+
+    ctx.fillRect(
+        6,
+        0,
+        22,
+        7
+    );
+
+
+    ctx.fillStyle =
+        "#e53935";
+
+    ctx.fillRect(
+        4,
+        -4,
+        25,
+        7
+    );
+
+
+    ctx.fillStyle =
+        "#111";
+
+
+    if(player.direction === 1){
+
+        ctx.fillRect(
+            22,
+            8,
+            3,
+            3
+        );
+
+    }else{
+
+        ctx.fillRect(
+            9,
+            8,
+            3,
+            3
+        );
+    }
+
+
+    ctx.fillStyle =
+        "#f2b27a";
+
+    ctx.fillRect(
+        0,
+        18,
+        7,
+        17
+    );
+
+    ctx.fillRect(
+        27,
+        18,
+        7,
+        17
+    );
+
+
+    ctx.fillStyle =
+        "#2455a4";
+
+    ctx.fillRect(
+        7,
+        40,
+        9,
+        8
+    );
+
+    ctx.fillRect(
+        18,
+        40,
+        9,
+        8
+    );
+
+
+    ctx.restore();
+}
+
+
+/* =========================
+   CAMERA
+========================= */
+
+function updateCamera(){
+
+    if(secretRoomActive){
+        return;
+    }
+
+
+    const target =
+        player.x-
+        canvas.width*.4;
+
+
+    cameraX +=
+        (
+            target-cameraX
+        )*.1;
+
+
+    cameraX =
+        clamp(
+            cameraX,
+            0,
+            levels[
+                currentLevel
+            ].width-
+            canvas.width
+        );
+}
+
+
+/* =========================
+   HUD
+========================= */
+
+function updateHUD(){
+
+    coinsElement.textContent =
+        coins;
+
+    livesElement.textContent =
+        lives;
+
+    scoreElement.textContent =
+        score;
+}
+
+
+/* =========================
+   COMPLETE LEVEL
+========================= */
+
+function completeLevel(){
+
+    if(levelTransition > 0){
+        return;
+    }
+
+
+    levelTransition = 100;
+
+    levelCompleteTimer = 110;
+
+    player.velocityX = 0;
+    player.velocityY = 0;
+
+
+    score += 1000;
+
+
+    createConfetti(
+        currentLevel === levels.length-1
+        ? 220
+        : 140
+    );
+
+
+    playSound(
+        700,
+        .15,
+        "square",
+        .06
+    );
+
+
+    setTimeout(()=>{
+
+        if(
+            currentLevel <
+            levels.length-1
+        ){
+
+            levelCompleteTimer = 0;
+
+            loadLevel(
+                currentLevel+1
+            );
+
+        }else{
+
+            levelCompleteTimer = 0;
+
+            winGame();
+        }
+
+
+        levelTransition = 0;
+
+    },2300);
+}
+
+
+/* =========================
+   GAME OVER
+========================= */
+
+function gameOver(){
+
+    gameRunning = false;
+
+    messageTitle.textContent =
+        "GAME OVER";
+
+    messageText.textContent =
+        "Lavan tog dig! Poäng: "+
+        score;
+
+    message.style.display =
+        "flex";
+}
+
+
+/* =========================
+   WIN
+========================= */
+
+function winGame(){
+
+    gameRunning = false;
+
+    createConfetti(300);
+
+
+    messageTitle.textContent =
+        "DU KLARADE DET! 🎉";
+
+
+    messageText.textContent =
+        "Alla banor är klara! Poäng: "+
+        score;
+
+
+    message.style.display =
+        "flex";
+}
+
+
+/* =========================
+   MESSAGE
+========================= */
+
+function hideMessage(){
+
+    message.style.display =
+        "none";
+}
+
+
+/* =========================
+   RESTART
+========================= */
+
+function restartGame(){
+
+    coins = 0;
+    lives = 3;
+    score = 0;
+
+    gameRunning = true;
+
+    levelTransition = 0;
+    levelCompleteTimer = 0;
+
+    secretRoomActive = false;
+    secretMedalCollected = false;
+    secretChestOpened = false;
+
+    confetti.length = 0;
+
+    updateHUD();
+
+    loadLevel(0);
+}
+
+
+restartButton.addEventListener(
+    "click",
+    ()=>{
+        initAudio();
+        restartGame();
+    }
+);
+
+
+/* =========================
+   DRAW
+========================= */
+
+function draw(){
+
+    /*
+        HEMLIGT RUM
+    */
+
+    if(secretRoomActive){
+
+        ctx.clearRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+
+        drawSecretRoom();
+
+        drawConfetti();
+
+        return;
+    }
+
+
+    /*
+        VANLIG BANA
+    */
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    drawBackground();
+
+    /*
+        Lava ritas först så att
+        markplattformarna täcker
+        lava där det ska vara mark.
+    */
+
+    drawLava();
+
+    drawPlatforms();
+
+    drawCoins();
+
+    drawEnemies();
+
+    drawBoss();
+
+    drawSecretObjects();
+
+    drawGoal();
+
+    drawPlayer();
+
+    drawConfetti();
+
+
+    /*
+        LEVEL COMPLETE TEXT
+    */
+
+    if(levelCompleteTimer > 0){
+
+        const alpha =
+            Math.min(
+                1,
+                (
+                    110-
+                    levelCompleteTimer
+                )/20
+            );
+
+
+        ctx.save();
+
+        ctx.globalAlpha =
+            alpha;
+
+        ctx.textAlign =
+            "center";
+
+
+        ctx.font =
+            "bold 46px Arial";
+
+        ctx.fillStyle =
+            "#fff";
+
+        ctx.shadowColor =
+            "#000";
+
+        ctx.shadowBlur = 8;
+
+
+        ctx.fillText(
+            currentLevel === levels.length-1
+            ? "DU KLARADE DET!"
+            : "BANA KLAR!",
+            canvas.width/2,
+            150
+        );
+
+
+        ctx.font =
+            "bold 22px Arial";
+
+        ctx.fillStyle =
+            "#ffd700";
+
+
+        ctx.fillText(
+            currentLevel === levels.length-1
+            ? "🎉 FANTASTISKT! 🎉"
+            : "Nästa bana kommer...",
+            canvas.width/2,
+            190
+        );
+
+
+        ctx.restore();
+    }
+}
+
+
+/* =========================
+   GAME LOOP
+========================= */
+
+function gameLoop(){
+
+    updatePlayer();
+
+    updateCamera();
+
+    updateConfetti();
+
+    updateHUD();
+
+    draw();
+
+    requestAnimationFrame(
+        gameLoop
+    );
+}
+
+
+/* =========================
+   START
+========================= */
+
+loadLevel(0);
+
+updateHUD();
+
+gameLoop();
+
+</script>
+
+</body>
+</html>
