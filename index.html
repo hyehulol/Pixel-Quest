@@ -45,7 +45,7 @@ canvas{
     display:flex;
     justify-content:space-between;
     pointer-events:none;
-    font-size:18px;
+    font-size:17px;
     font-weight:bold;
     text-shadow:2px 2px 3px #000;
     z-index:5;
@@ -56,7 +56,7 @@ canvas{
     bottom:10px;
     left:50%;
     transform:translateX(-50%);
-    background:rgba(0,0,0,.6);
+    background:rgba(0,0,0,.65);
     padding:7px 15px;
     border-radius:8px;
     font-size:13px;
@@ -71,7 +71,7 @@ canvas{
     justify-content:center;
     align-items:center;
     flex-direction:column;
-    background:rgba(0,0,0,.72);
+    background:rgba(0,0,0,.78);
     text-align:center;
     z-index:10;
 }
@@ -111,11 +111,11 @@ canvas{
 <canvas id="game" width="1000" height="560"></canvas>
 
 <div id="hud">
-    <div>🪙 Mynt: <span id="coins">0</span></div>
-    <div>❤️ Liv: <span id="lives">3</span></div>
-    <div>⭐ Poäng: <span id="score">0</span></div>
-    <div id="keyHud">🔑 Nyckel: <span id="keyStatus">NEJ</span></div>
-    <div>🏰 Bana: <span id="level">1</span></div>
+    <div>🪙 <span id="coins">0</span></div>
+    <div>❤️ <span id="lives">3</span></div>
+    <div>⭐ <span id="score">0</span></div>
+    <div id="keyHud">🔑 <span id="keyStatus">—</span></div>
+    <div>🏰 <span id="level">1</span>/10</div>
 </div>
 
 <div id="controls">
@@ -153,15 +153,16 @@ const messageText = document.getElementById("messageText");
 const restartButton = document.getElementById("restartButton");
 
 
-/* =========================
+/* =========================================================
    LJUD
-========================= */
+========================================================= */
 
 let audioContext = null;
 
 function initAudio(){
     if(!audioContext){
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioContext =
+            new (window.AudioContext || window.webkitAudioContext)();
     }
 }
 
@@ -173,8 +174,11 @@ function playSound(
 ){
     if(!audioContext) return;
 
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
+    const oscillator =
+        audioContext.createOscillator();
+
+    const gain =
+        audioContext.createGain();
 
     oscillator.type = type;
     oscillator.frequency.value = frequency;
@@ -197,53 +201,54 @@ function playSound(
 }
 
 
-/* =========================
+/* =========================================================
    INPUT
-========================= */
+========================================================= */
 
 const keys = {};
 
 let jumpPressed = false;
 let interactPressed = false;
 
-window.addEventListener("keydown", e => {
+window.addEventListener("keydown",e=>{
 
     initAudio();
 
     if(
-        e.code === "Space" ||
-        e.code === "ArrowUp" ||
-        e.code === "KeyW"
+        e.code==="Space" ||
+        e.code==="ArrowUp" ||
+        e.code==="KeyW"
     ){
+
         if(!keys[e.code]){
-            jumpPressed = true;
+            jumpPressed=true;
         }
 
         e.preventDefault();
     }
 
     if(
-        e.code === "KeyE" &&
+        e.code==="KeyE" &&
         !keys[e.code]
     ){
-        interactPressed = true;
+        interactPressed=true;
     }
 
-    keys[e.code] = true;
+    keys[e.code]=true;
 
-    if(e.code === "KeyR"){
+    if(e.code==="KeyR"){
         restartGame();
     }
 });
 
-window.addEventListener("keyup", e => {
-    keys[e.code] = false;
+window.addEventListener("keyup",e=>{
+    keys[e.code]=false;
 });
 
 
-/* =========================
+/* =========================================================
    PLAYER
-========================= */
+========================================================= */
 
 const player = {
 
@@ -264,7 +269,6 @@ const player = {
     gravity:.58,
 
     grounded:false,
-
     direction:1,
 
     invincible:0,
@@ -278,41 +282,40 @@ const player = {
 };
 
 
-/* =========================
+/* =========================================================
    GLOBAL GAME STATE
-========================= */
+========================================================= */
 
-let cameraX = 0;
+let cameraX=0;
+let currentLevel=0;
 
-let currentLevel = 0;
+let coins=0;
+let lives=3;
+let score=0;
 
-let coins = 0;
-let lives = 3;
-let score = 0;
+let gameRunning=true;
 
-let gameRunning = true;
+let levelTransition=0;
+let levelCompleteTimer=0;
 
-let levelTransition = 0;
-let levelCompleteTimer = 0;
+let keyPickupTimer=0;
 
-/*
-    NYCKELUPPTAGNING
+let secretRoomActive=false;
 
-    Timer för den stora
-    "🔑 NYCKEL!"-texten.
-*/
-let keyPickupTimer = 0;
+const confetti=[];
 
-let secretRoomActive = false;
-let secretMedalCollected = false;
-let secretChestOpened = false;
+let levelCoins=[];
+let levelEnemies=[];
+let levelSpikes=[];
+let levelMovingPlatforms=[];
+let levelProjectiles=[];
 
-const confetti = [];
+let boss=null;
 
 
-/* =========================
+/* =========================================================
    CONFETTI
-========================= */
+========================================================= */
 
 function createConfetti(amount=120){
 
@@ -358,61 +361,26 @@ function updateConfetti(){
         i--
     ){
 
-        const p = confetti[i];
+        const p=confetti[i];
 
-        p.x += p.velocityX;
-        p.y += p.velocityY;
+        p.x+=p.velocityX;
+        p.y+=p.velocityY;
 
-        p.velocityY += p.gravity;
-        p.velocityX *= .995;
+        p.velocityY+=p.gravity;
+        p.velocityX*=.995;
 
-        p.rotation += p.rotationSpeed;
+        p.rotation+=p.rotationSpeed;
 
         p.life--;
 
         if(
-            p.life <= 0 ||
-            p.y > canvas.height+50
+            p.life<=0 ||
+            p.y>canvas.height+50
         ){
             confetti.splice(i,1);
         }
     }
 }
-
-
-/* =========================
-   NYCKELSPARKLES
-========================= */
-
-function createKeySparkles(x,y){
-
-    for(let i=0;i<10;i++){
-
-        confetti.push({
-
-            x:x-cameraX,
-            y:y,
-
-            velocityX:(Math.random()-.5)*3,
-            velocityY:(Math.random()-.5)*3,
-
-            gravity:.03,
-
-            size:2+Math.random()*3,
-
-            rotation:0,
-            rotationSpeed:0,
-
-            life:35+Math.random()*20,
-
-            color:
-                Math.random() > .35
-                ? "#ffd700"
-                : "#fff6a0"
-        });
-    }
-}
-
 
 function drawConfetti(){
 
@@ -423,7 +391,7 @@ function drawConfetti(){
         ctx.translate(p.x,p.y);
         ctx.rotate(p.rotation);
 
-        ctx.fillStyle = p.color;
+        ctx.fillStyle=p.color;
 
         ctx.fillRect(
             -p.size/2,
@@ -437,34 +405,64 @@ function drawConfetti(){
 }
 
 
-/* =========================
-   LEVELS
-========================= */
+/* =========================================================
+   KEY SPARKLES
+========================================================= */
+
+function createKeySparkles(x,y){
+
+    for(let i=0;i<12;i++){
+
+        confetti.push({
+
+            x:x-cameraX,
+            y:y,
+
+            velocityX:(Math.random()-.5)*4,
+            velocityY:(Math.random()-.5)*4,
+
+            gravity:.03,
+
+            size:2+Math.random()*3,
+
+            rotation:0,
+            rotationSpeed:0,
+
+            life:35+Math.random()*25,
+
+            color:
+                Math.random()>.35
+                ? "#ffd700"
+                : "#fff6a0"
+        });
+    }
+}
+
+
+/* =========================================================
+   LEVEL DATA
+========================================================= */
 
 const levels = [
 
-/* =========================
+/* =========================================================
    LEVEL 1
-========================= */
+========================================================= */
 
 {
     name:"Den gröna dalen",
+    theme:"green",
+    width:4400,
 
-    width:4200,
-
-    spawn:{
-        x:100,
-        y:300
-    },
+    spawn:{x:100,y:300},
 
     platforms:[
-
         {x:0,y:470,w:700,h:90},
         {x:820,y:470,w:550,h:90},
         {x:1490,y:470,w:500,h:90},
         {x:2110,y:470,w:650,h:90},
         {x:2900,y:470,w:500,h:90},
-        {x:3550,y:470,w:650,h:90},
+        {x:3550,y:470,w:850,h:90},
 
         {x:450,y:390,w:150,h:20},
         {x:950,y:370,w:160,h:20},
@@ -484,50 +482,47 @@ const levels = [
         {x:2300,y:320},
         {x:2700,y:260},
         {x:3150,y:320},
-        {x:3700,y:280}
+        {x:3700,y:280},
+        {x:4050,y:420}
     ],
 
     enemies:[
-        {x:1100,y:430,w:35,h:40,speed:1.2},
-        {x:1750,y:430,w:35,h:40,speed:1.5},
-        {x:2500,y:430,w:35,h:40,speed:1.3},
-        {x:3200,y:430,w:35,h:40,speed:1.5}
+        {x:1000,y:430,w:35,h:40,speed:1.2,type:"walker"},
+        {x:1750,y:430,w:35,h:40,speed:1.5,type:"walker"},
+        {x:2500,y:430,w:35,h:40,speed:1.3,type:"walker"},
+        {x:3200,y:430,w:35,h:40,speed:1.5,type:"walker"},
+        {x:3850,y:430,w:35,h:40,speed:1.7,type:"fast"}
     ],
 
-    goal:{
-        x:3950,
-        y:390
-    }
+    spikes:[
+        {x:1300,y:450,w:45,h:20},
+        {x:1980,y:450,w:55,h:20},
+        {x:3380,y:450,w:60,h:20}
+    ],
+
+    goal:{x:4250,y:390}
 },
 
 
-/* =========================
+/* =========================================================
    LEVEL 2
-   HEMLIG VÄG
-========================= */
+========================================================= */
 
 {
     name:"Kristallgrottan",
+    theme:"crystal",
+    width:5200,
 
-    width:5000,
-
-    spawn:{
-        x:100,
-        y:300
-    },
+    spawn:{x:100,y:300},
 
     platforms:[
-
         {x:0,y:470,w:650,h:90},
         {x:800,y:470,w:420,h:90},
         {x:1370,y:470,w:520,h:90},
         {x:2040,y:470,w:430,h:90},
         {x:2620,y:470,w:480,h:90},
-
         {x:3250,y:470,w:550,h:90},
-
-        {x:3950,y:470,w:1050,h:90},
-
+        {x:3950,y:470,w:1250,h:90},
 
         {x:400,y:370,w:160,h:20},
         {x:900,y:350,w:170,h:20},
@@ -543,7 +538,6 @@ const levels = [
         {x:4100,y:340,w:170,h:20}
     ],
 
-
     coins:[
         {x:450,y:330},
         {x:950,y:310},
@@ -556,23 +550,27 @@ const levels = [
         {x:3060,y:250},
         {x:3440,y:310},
         {x:3690,y:230},
-        {x:4140,y:300}
+        {x:4140,y:300},
+        {x:4600,y:420}
     ],
-
 
     enemies:[
-        {x:900,y:430,w:35,h:40,speed:1.5},
-        {x:1510,y:430,w:35,h:40,speed:1.7},
-        {x:2180,y:430,w:35,h:40,speed:1.6},
-        {x:2780,y:430,w:35,h:40,speed:1.8},
-        {x:3450,y:430,w:35,h:40,speed:1.7},
-        {x:4200,y:430,w:35,h:40,speed:1.9}
+        {x:900,y:430,w:35,h:40,speed:1.5,type:"walker"},
+        {x:1510,y:430,w:35,h:40,speed:1.7,type:"fast"},
+        {x:2180,y:430,w:35,h:40,speed:1.6,type:"walker"},
+        {x:2780,y:430,w:35,h:40,speed:1.8,type:"jumper"},
+        {x:3450,y:430,w:35,h:40,speed:1.7,type:"fast"},
+        {x:4200,y:430,w:35,h:40,speed:1.9,type:"walker"},
+        {x:4500,y:300,w:35,h:40,speed:1.2,type:"flyer"}
     ],
 
-
-    /*
-        OSYNLIGA HEMLIGA BLOCKET
-    */
+    spikes:[
+        {x:600,y:450,w:40,h:20},
+        {x:1830,y:450,w:50,h:20},
+        {x:2400,y:450,w:50,h:20},
+        {x:3050,y:450,w:50,h:20},
+        {x:3800,y:450,w:60,h:20}
+    ],
 
     secretBlock:{
         x:1125,
@@ -582,43 +580,23 @@ const levels = [
         activated:false
     },
 
-
-    /*
-        HEMLIGA NYCKELN
-    */
-
     secretKey:{
         x:1150,
         y:185,
-
         width:18,
         height:25,
-
         visible:false,
         collected:false,
-
         velocityY:0
     },
-
-
-    /*
-        HEMLIGA DÖRREN
-    */
 
     secretDoor:{
         x:3460,
         y:390,
-
         width:55,
         height:80,
-
         opened:false
     },
-
-
-    /*
-        HEMLIGA RUMMET
-    */
 
     secretRoom:{
         active:false,
@@ -626,191 +604,910 @@ const levels = [
         medalCollected:false
     },
 
-
-    goal:{
-        x:4750,
-        y:390
-    }
+    goal:{x:4950,y:390}
 },
 
 
-/* =========================
+/* =========================================================
    LEVEL 3
-========================= */
+========================================================= */
 
 {
     name:"Den mörka fästningen",
+    theme:"dark",
+    width:5300,
 
-    width:5000,
-
-    spawn:{
-        x:100,
-        y:300
-    },
+    spawn:{x:100,y:300},
 
     platforms:[
+        {x:0,y:470,w:550,h:90},
+        {x:700,y:470,w:430,h:90},
+        {x:1280,y:470,w:430,h:90},
+        {x:1860,y:470,w:420,h:90},
+        {x:2440,y:470,w:450,h:90},
+        {x:3050,y:470,w:450,h:90},
+        {x:3660,y:470,w:480,h:90},
+        {x:4300,y:470,w:1000,h:90},
 
-        {x:0,y:470,w:600,h:90},
-        {x:750,y:470,w:500,h:90},
-        {x:1400,y:470,w:500,h:90},
-        {x:2050,y:470,w:500,h:90},
-        {x:2700,y:470,w:500,h:90},
-        {x:3350,y:470,w:550,h:90},
-        {x:4050,y:470,w:950,h:90},
-
-        {x:350,y:350,w:150,h:20},
-        {x:850,y:320,w:150,h:20},
-        {x:1150,y:250,w:150,h:20},
-        {x:1500,y:350,w:150,h:20},
-        {x:1800,y:270,w:150,h:20},
-        {x:2150,y:350,w:150,h:20},
-        {x:2450,y:270,w:150,h:20},
-        {x:2800,y:350,w:150,h:20},
-        {x:3100,y:250,w:150,h:20},
-        {x:3500,y:350,w:150,h:20},
-        {x:3800,y:270,w:150,h:20},
-        {x:4250,y:340,w:150,h:20}
+        {x:300,y:350,w:150,h:20},
+        {x:820,y:320,w:150,h:20},
+        {x:1100,y:240,w:150,h:20},
+        {x:1400,y:350,w:150,h:20},
+        {x:1650,y:270,w:150,h:20},
+        {x:1980,y:350,w:150,h:20},
+        {x:2250,y:260,w:150,h:20},
+        {x:2550,y:340,w:150,h:20},
+        {x:2800,y:240,w:150,h:20},
+        {x:3150,y:350,w:150,h:20},
+        {x:3400,y:260,w:150,h:20},
+        {x:3750,y:340,w:150,h:20},
+        {x:4050,y:250,w:150,h:20},
+        {x:4500,y:340,w:150,h:20}
     ],
 
     coins:[
-        {x:400,y:310},
-        {x:900,y:280},
-        {x:1200,y:210},
-        {x:1550,y:310},
-        {x:1850,y:230},
-        {x:2200,y:310},
-        {x:2500,y:230},
-        {x:2850,y:310},
-        {x:3150,y:210},
-        {x:3550,y:310},
-        {x:3850,y:230},
-        {x:4300,y:300}
+        {x:350,y:310},
+        {x:870,y:280},
+        {x:1150,y:200},
+        {x:1450,y:310},
+        {x:1700,y:230},
+        {x:2030,y:310},
+        {x:2300,y:220},
+        {x:2600,y:300},
+        {x:2850,y:200},
+        {x:3200,y:310},
+        {x:3450,y:220},
+        {x:3800,y:300},
+        {x:4100,y:210},
+        {x:4550,y:300},
+        {x:4750,y:420}
     ],
 
     enemies:[
-        {x:800,y:430,w:35,h:40,speed:1.7},
-        {x:1500,y:430,w:35,h:40,speed:1.8},
-        {x:2200,y:430,w:35,h:40,speed:1.9},
-        {x:2900,y:430,w:35,h:40,speed:1.8},
-        {x:3500,y:430,w:35,h:40,speed:2},
-        {x:4200,y:430,w:35,h:40,speed:2}
+        {x:800,y:430,w:35,h:40,speed:1.8,type:"fast"},
+        {x:1400,y:430,w:35,h:40,speed:1.8,type:"jumper"},
+        {x:1980,y:430,w:35,h:40,speed:1.9,type:"walker"},
+        {x:2550,y:430,w:35,h:40,speed:2,type:"fast"},
+        {x:3150,y:430,w:35,h:40,speed:2,type:"jumper"},
+        {x:3750,y:430,w:35,h:40,speed:2.1,type:"fast"},
+        {x:4450,y:430,w:35,h:40,speed:2.2,type:"walker"},
+        {x:4800,y:300,w:35,h:40,speed:1.5,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:500,y:450,w:50,h:20},
+        {x:1080,y:450,w:60,h:20},
+        {x:1690,y:450,w:60,h:20},
+        {x:2270,y:450,w:60,h:20},
+        {x:2890,y:450,w:60,h:20},
+        {x:3500,y:450,w:60,h:20},
+        {x:4130,y:450,w:70,h:20}
+    ],
+
+    goal:{x:5100,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 4
+========================================================= */
+
+{
+    name:"Ökenruinerna",
+    theme:"desert",
+    width:5600,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:600,h:90},
+        {x:760,y:470,w:500,h:90},
+        {x:1430,y:470,w:380,h:90},
+        {x:1980,y:470,w:500,h:90},
+        {x:2660,y:470,w:450,h:90},
+        {x:3290,y:470,w:500,h:90},
+        {x:3980,y:470,w:420,h:90},
+        {x:4580,y:470,w:1020,h:90},
+
+        {x:350,y:360,w:160,h:20},
+        {x:850,y:330,w:150,h:20},
+        {x:1110,y:260,w:150,h:20},
+        {x:1500,y:350,w:140,h:20},
+        {x:1740,y:260,w:140,h:20},
+        {x:2070,y:340,w:160,h:20},
+        {x:2350,y:250,w:150,h:20},
+        {x:2740,y:340,w:150,h:20},
+        {x:3000,y:250,w:150,h:20},
+        {x:3380,y:350,w:150,h:20},
+        {x:3650,y:270,w:150,h:20},
+        {x:4080,y:340,w:150,h:20},
+        {x:4400,y:260,w:150,h:20},
+        {x:4800,y:340,w:170,h:20}
+    ],
+
+    coins:[
+        {x:400,y:320},
+        {x:900,y:290},
+        {x:1160,y:220},
+        {x:1540,y:310},
+        {x:1780,y:220},
+        {x:2110,y:300},
+        {x:2390,y:210},
+        {x:2780,y:300},
+        {x:3040,y:210},
+        {x:3420,y:310},
+        {x:3690,y:230},
+        {x:4120,y:300},
+        {x:4440,y:220},
+        {x:4860,y:300},
+        {x:5200,y:420}
+    ],
+
+    enemies:[
+        {x:850,y:430,w:35,h:40,speed:2,type:"fast"},
+        {x:1500,y:430,w:35,h:40,speed:2,type:"walker"},
+        {x:2050,y:430,w:35,h:40,speed:2.1,type:"jumper"},
+        {x:2750,y:430,w:35,h:40,speed:2.2,type:"fast"},
+        {x:3400,y:430,w:35,h:40,speed:2.2,type:"walker"},
+        {x:4050,y:430,w:35,h:40,speed:2.3,type:"jumper"},
+        {x:4700,y:430,w:35,h:40,speed:2.4,type:"fast"},
+        {x:5000,y:290,w:35,h:40,speed:1.6,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:570,y:450,w:40,h:20},
+        {x:1260,y:450,w:50,h:20},
+        {x:1800,y:450,w:60,h:20},
+        {x:2470,y:450,w:60,h:20},
+        {x:3100,y:450,w:60,h:20},
+        {x:3790,y:450,w:60,h:20},
+        {x:4380,y:450,w:70,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:610,y:380,w:100,h:18,minX:610,maxX:730,speed:1.5,direction:1},
+        {x:1830,y:330,w:110,h:18,minX:1830,maxX:1960,speed:1.7,direction:1},
+        {x:2500,y:300,w:100,h:18,minX:2500,maxX:2630,speed:2,direction:1}
+    ],
+
+    goal:{x:5400,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 5 - BOSS
+========================================================= */
+
+{
+    name:"Drakens citadell",
+    theme:"fire",
+    width:6000,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:550,h:90},
+        {x:720,y:470,w:450,h:90},
+        {x:1320,y:470,w:430,h:90},
+        {x:1900,y:470,w:400,h:90},
+        {x:2450,y:470,w:450,h:90},
+        {x:3050,y:470,w:430,h:90},
+        {x:3650,y:470,w:450,h:90},
+        {x:4250,y:470,w:450,h:90},
+        {x:4850,y:470,w:1150,h:90},
+
+        {x:300,y:350,w:150,h:20},
+        {x:800,y:330,w:150,h:20},
+        {x:1060,y:240,w:150,h:20},
+        {x:1370,y:340,w:150,h:20},
+        {x:1600,y:250,w:150,h:20},
+        {x:1950,y:330,w:150,h:20},
+        {x:2200,y:230,w:150,h:20},
+        {x:2500,y:330,w:150,h:20},
+        {x:2800,y:240,w:150,h:20},
+        {x:3100,y:330,w:150,h:20},
+        {x:3350,y:230,w:150,h:20},
+        {x:3700,y:330,w:150,h:20},
+        {x:4000,y:230,w:150,h:20},
+        {x:4350,y:330,w:150,h:20},
+        {x:4650,y:250,w:150,h:20}
+    ],
+
+    coins:[
+        {x:350,y:310},
+        {x:850,y:290},
+        {x:1110,y:200},
+        {x:1420,y:300},
+        {x:1650,y:210},
+        {x:2000,y:290},
+        {x:2250,y:190},
+        {x:2550,y:290},
+        {x:2850,y:200},
+        {x:3150,y:290},
+        {x:3400,y:190},
+        {x:3750,y:290},
+        {x:4050,y:190},
+        {x:4400,y:290},
+        {x:4700,y:210},
+        {x:5200,y:420},
+        {x:5600,y:420}
+    ],
+
+    enemies:[
+        {x:800,y:430,w:35,h:40,speed:2.2,type:"fast"},
+        {x:1400,y:430,w:35,h:40,speed:2.2,type:"jumper"},
+        {x:1980,y:430,w:35,h:40,speed:2.3,type:"fast"},
+        {x:2550,y:430,w:35,h:40,speed:2.4,type:"jumper"},
+        {x:3150,y:430,w:35,h:40,speed:2.5,type:"fast"},
+        {x:3750,y:430,w:35,h:40,speed:2.5,type:"jumper"},
+        {x:4350,y:430,w:35,h:40,speed:2.6,type:"fast"},
+        {x:5150,y:430,w:35,h:40,speed:2.7,type:"walker"},
+        {x:5450,y:300,w:35,h:40,speed:1.7,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:520,y:450,w:50,h:20},
+        {x:1170,y:450,w:60,h:20},
+        {x:1750,y:450,w:60,h:20},
+        {x:2300,y:450,w:60,h:20},
+        {x:2900,y:450,w:70,h:20},
+        {x:3480,y:450,w:60,h:20},
+        {x:4100,y:450,w:70,h:20},
+        {x:4700,y:450,w:70,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:600,y:360,w:100,h:18,minX:600,maxX:700,speed:2,direction:1},
+        {x:1170,y:300,w:100,h:18,minX:1170,maxX:1300,speed:2,direction:1},
+        {x:2300,y:300,w:100,h:18,minX:2300,maxX:2420,speed:2.2,direction:1},
+        {x:3480,y:300,w:100,h:18,minX:3480,maxX:3600,speed:2.2,direction:1}
     ],
 
     boss:{
-        x:4550,
-        y:360,
-
-        width:90,
-        height:110,
-
-        health:5,
-        maxHealth:5,
-
+        x:5150,
+        y:330,
+        width:120,
+        height:140,
+        health:8,
+        maxHealth:8,
         direction:-1,
-        speed:1.2
+        speed:1.5,
+        type:"dragon"
     },
 
-    goal:{
-        x:4850,
-        y:390
-    }
+    goal:{x:5800,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 6
+========================================================= */
+
+{
+    name:"Isens tempel",
+    theme:"ice",
+    width:6200,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:650,h:90},
+        {x:820,y:470,w:400,h:90},
+        {x:1400,y:470,w:400,h:90},
+        {x:1980,y:470,w:420,h:90},
+        {x:2580,y:470,w:420,h:90},
+        {x:3180,y:470,w:450,h:90},
+        {x:3820,y:470,w:400,h:90},
+        {x:4400,y:470,w:450,h:90},
+        {x:5050,y:470,w:1150,h:90},
+
+        {x:350,y:360,w:150,h:20},
+        {x:900,y:330,w:150,h:20},
+        {x:1160,y:250,w:150,h:20},
+        {x:1460,y:350,w:150,h:20},
+        {x:1700,y:250,w:150,h:20},
+        {x:2030,y:340,w:150,h:20},
+        {x:2300,y:240,w:150,h:20},
+        {x:2630,y:340,w:150,h:20},
+        {x:2890,y:230,w:150,h:20},
+        {x:3230,y:350,w:150,h:20},
+        {x:3500,y:250,w:150,h:20},
+        {x:3870,y:340,w:150,h:20},
+        {x:4150,y:240,w:150,h:20},
+        {x:4450,y:340,w:150,h:20},
+        {x:4750,y:250,w:150,h:20}
+    ],
+
+    coins:[
+        {x:400,y:320},
+        {x:950,y:290},
+        {x:1210,y:210},
+        {x:1510,y:310},
+        {x:1750,y:210},
+        {x:2080,y:300},
+        {x:2350,y:200},
+        {x:2680,y:300},
+        {x:2940,y:190},
+        {x:3280,y:310},
+        {x:3550,y:210},
+        {x:3920,y:300},
+        {x:4200,y:200},
+        {x:4500,y:300},
+        {x:4800,y:210},
+        {x:5500,y:420}
+    ],
+
+    enemies:[
+        {x:900,y:430,w:35,h:40,speed:2.3,type:"fast"},
+        {x:1500,y:430,w:35,h:40,speed:2.2,type:"jumper"},
+        {x:2080,y:430,w:35,h:40,speed:2.4,type:"fast"},
+        {x:2700,y:430,w:35,h:40,speed:2.4,type:"jumper"},
+        {x:3300,y:430,w:35,h:40,speed:2.5,type:"fast"},
+        {x:3900,y:430,w:35,h:40,speed:2.5,type:"walker"},
+        {x:4500,y:430,w:35,h:40,speed:2.6,type:"jumper"},
+        {x:5200,y:430,w:35,h:40,speed:2.7,type:"fast"},
+        {x:5700,y:290,w:35,h:40,speed:1.7,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:620,y:450,w:50,h:20},
+        {x:1220,y:450,w:60,h:20},
+        {x:1800,y:450,w:60,h:20},
+        {x:2400,y:450,w:70,h:20},
+        {x:3000,y:450,w:70,h:20},
+        {x:3630,y:450,w:60,h:20},
+        {x:4220,y:450,w:70,h:20},
+        {x:4850,y:450,w:70,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:650,y:360,w:100,h:18,minX:650,maxX:790,speed:2,direction:1},
+        {x:1820,y:320,w:100,h:18,minX:1820,maxX:1940,speed:2,direction:1},
+        {x:3010,y:310,w:100,h:18,minX:3010,maxX:3130,speed:2.2,direction:1},
+        {x:4250,y:300,w:100,h:18,minX:4250,maxX:4380,speed:2.3,direction:1}
+    ],
+
+    goal:{x:5950,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 7
+========================================================= */
+
+{
+    name:"Den övergivna staden",
+    theme:"city",
+    width:6400,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:550,h:90},
+        {x:700,y:470,w:400,h:90},
+        {x:1250,y:470,w:450,h:90},
+        {x:1850,y:470,w:400,h:90},
+        {x:2420,y:470,w:450,h:90},
+        {x:3040,y:470,w:400,h:90},
+        {x:3600,y:470,w:450,h:90},
+        {x:4200,y:470,w:400,h:90},
+        {x:4800,y:470,w:450,h:90},
+        {x:5400,y:470,w:1000,h:90},
+
+        {x:250,y:350,w:150,h:20},
+        {x:780,y:320,w:150,h:20},
+        {x:1040,y:230,w:150,h:20},
+        {x:1300,y:340,w:150,h:20},
+        {x:1550,y:240,w:150,h:20},
+        {x:1900,y:330,w:150,h:20},
+        {x:2160,y:230,w:150,h:20},
+        {x:2480,y:340,w:150,h:20},
+        {x:2740,y:240,w:150,h:20},
+        {x:3100,y:330,w:150,h:20},
+        {x:3350,y:230,w:150,h:20},
+        {x:3660,y:340,w:150,h:20},
+        {x:3950,y:230,w:150,h:20},
+        {x:4250,y:340,w:150,h:20},
+        {x:4550,y:240,w:150,h:20},
+        {x:4900,y:340,w:150,h:20},
+        {x:5200,y:250,w:150,h:20}
+    ],
+
+    coins:[
+        {x:300,y:310},
+        {x:830,y:280},
+        {x:1090,y:190},
+        {x:1350,y:300},
+        {x:1600,y:200},
+        {x:1950,y:290},
+        {x:2210,y:190},
+        {x:2530,y:300},
+        {x:2790,y:200},
+        {x:3150,y:290},
+        {x:3400,y:190},
+        {x:3710,y:300},
+        {x:4000,y:190},
+        {x:4300,y:300},
+        {x:4600,y:200},
+        {x:4950,y:300},
+        {x:5250,y:210},
+        {x:5800,y:420}
+    ],
+
+    enemies:[
+        {x:800,y:430,w:35,h:40,speed:2.5,type:"fast"},
+        {x:1350,y:430,w:35,h:40,speed:2.4,type:"jumper"},
+        {x:1950,y:430,w:35,h:40,speed:2.5,type:"fast"},
+        {x:2500,y:430,w:35,h:40,speed:2.6,type:"jumper"},
+        {x:3150,y:430,w:35,h:40,speed:2.6,type:"fast"},
+        {x:3700,y:430,w:35,h:40,speed:2.7,type:"jumper"},
+        {x:4300,y:430,w:35,h:40,speed:2.7,type:"fast"},
+        {x:4900,y:430,w:35,h:40,speed:2.8,type:"jumper"},
+        {x:5500,y:430,w:35,h:40,speed:2.9,type:"fast"},
+        {x:5800,y:280,w:35,h:40,speed:1.8,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:520,y:450,w:50,h:20},
+        {x:1100,y:450,w:60,h:20},
+        {x:1700,y:450,w:60,h:20},
+        {x:2250,y:450,w:70,h:20},
+        {x:2870,y:450,w:70,h:20},
+        {x:3440,y:450,w:60,h:20},
+        {x:4050,y:450,w:70,h:20},
+        {x:4650,y:450,w:70,h:20},
+        {x:5250,y:450,w:70,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:550,y:350,w:100,h:18,minX:550,maxX:680,speed:2,direction:1},
+        {x:1100,y:300,w:100,h:18,minX:1100,maxX:1230,speed:2.2,direction:1},
+        {x:2260,y:300,w:100,h:18,minX:2260,maxX:2390,speed:2.3,direction:1},
+        {x:3450,y:300,w:100,h:18,minX:3450,maxX:3580,speed:2.5,direction:1},
+        {x:4650,y:300,w:100,h:18,minX:4650,maxX:4780,speed:2.5,direction:1}
+    ],
+
+    goal:{x:6200,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 8
+========================================================= */
+
+{
+    name:"Vulkanens hjärta",
+    theme:"volcano",
+    width:6500,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:500,h:90},
+        {x:650,y:470,w:420,h:90},
+        {x:1200,y:470,w:400,h:90},
+        {x:1740,y:470,w:400,h:90},
+        {x:2280,y:470,w:420,h:90},
+        {x:2850,y:470,w:400,h:90},
+        {x:3400,y:470,w:450,h:90},
+        {x:4000,y:470,w:400,h:90},
+        {x:4550,y:470,w:450,h:90},
+        {x:5150,y:470,w:450,h:90},
+        {x:5750,y:470,w:750,h:90},
+
+        {x:250,y:340,w:140,h:20},
+        {x:720,y:320,w:150,h:20},
+        {x:970,y:220,w:150,h:20},
+        {x:1260,y:330,w:150,h:20},
+        {x:1500,y:220,w:150,h:20},
+        {x:1800,y:330,w:150,h:20},
+        {x:2040,y:220,w:150,h:20},
+        {x:2340,y:330,w:150,h:20},
+        {x:2600,y:220,w:150,h:20},
+        {x:2910,y:330,w:150,h:20},
+        {x:3160,y:220,w:150,h:20},
+        {x:3460,y:330,w:150,h:20},
+        {x:3710,y:220,w:150,h:20},
+        {x:4050,y:330,w:150,h:20},
+        {x:4300,y:220,w:150,h:20},
+        {x:4600,y:330,w:150,h:20},
+        {x:4900,y:220,w:150,h:20},
+        {x:5250,y:330,w:150,h:20}
+    ],
+
+    coins:[
+        {x:300,y:300},
+        {x:770,y:280},
+        {x:1020,y:180},
+        {x:1310,y:290},
+        {x:1550,y:180},
+        {x:1850,y:290},
+        {x:2090,y:180},
+        {x:2390,y:290},
+        {x:2650,y:180},
+        {x:2960,y:290},
+        {x:3210,y:180},
+        {x:3510,y:290},
+        {x:3760,y:180},
+        {x:4100,y:290},
+        {x:4350,y:180},
+        {x:4650,y:290},
+        {x:4950,y:180},
+        {x:5300,y:290},
+        {x:6000,y:420}
+    ],
+
+    enemies:[
+        {x:700,y:430,w:35,h:40,speed:2.6,type:"fast"},
+        {x:1300,y:430,w:35,h:40,speed:2.6,type:"jumper"},
+        {x:1850,y:430,w:35,h:40,speed:2.7,type:"fast"},
+        {x:2400,y:430,w:35,h:40,speed:2.7,type:"jumper"},
+        {x:2950,y:430,w:35,h:40,speed:2.8,type:"fast"},
+        {x:3500,y:430,w:35,h:40,speed:2.8,type:"jumper"},
+        {x:4100,y:430,w:35,h:40,speed:2.9,type:"fast"},
+        {x:4650,y:430,w:35,h:40,speed:3,type:"jumper"},
+        {x:5250,y:430,w:35,h:40,speed:3,type:"fast"},
+        {x:5700,y:290,w:35,h:40,speed:1.8,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:450,y:450,w:50,h:20},
+        {x:1070,y:450,w:60,h:20},
+        {x:1600,y:450,w:60,h:20},
+        {x:2140,y:450,w:70,h:20},
+        {x:2700,y:450,w:70,h:20},
+        {x:3350,y:450,w:70,h:20},
+        {x:3900,y:450,w:70,h:20},
+        {x:4500,y:450,w:70,h:20},
+        {x:5050,y:450,w:70,h:20},
+        {x:5600,y:450,w:70,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:500,y:350,w:100,h:18,minX:500,maxX:620,speed:2.3,direction:1},
+        {x:1080,y:300,w:100,h:18,minX:1080,maxX:1190,speed:2.5,direction:1},
+        {x:2140,y:300,w:100,h:18,minX:2140,maxX:2250,speed:2.5,direction:1},
+        {x:3250,y:300,w:100,h:18,minX:3250,maxX:3370,speed:2.7,direction:1},
+        {x:4450,y:300,w:100,h:18,minX:4450,maxX:4570,speed:2.8,direction:1}
+    ],
+
+    goal:{x:6250,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 9
+========================================================= */
+
+{
+    name:"Skuggornas värld",
+    theme:"shadow",
+    width:6800,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:500,h:90},
+        {x:650,y:470,w:400,h:90},
+        {x:1200,y:470,w:400,h:90},
+        {x:1750,y:470,w:380,h:90},
+        {x:2300,y:470,w:420,h:90},
+        {x:2900,y:470,w:400,h:90},
+        {x:3450,y:470,w:400,h:90},
+        {x:4000,y:470,w:420,h:90},
+        {x:4580,y:470,w:400,h:90},
+        {x:5150,y:470,w:420,h:90},
+        {x:5750,y:470,w:1050,h:90},
+
+        {x:220,y:340,w:140,h:20},
+        {x:700,y:300,w:150,h:20},
+        {x:960,y:200,w:150,h:20},
+        {x:1260,y:330,w:150,h:20},
+        {x:1510,y:220,w:150,h:20},
+        {x:1810,y:330,w:150,h:20},
+        {x:2070,y:210,w:150,h:20},
+        {x:2360,y:330,w:150,h:20},
+        {x:2630,y:210,w:150,h:20},
+        {x:2960,y:330,w:150,h:20},
+        {x:3220,y:210,w:150,h:20},
+        {x:3510,y:330,w:150,h:20},
+        {x:3780,y:210,w:150,h:20},
+        {x:4070,y:330,w:150,h:20},
+        {x:4350,y:210,w:150,h:20},
+        {x:4650,y:330,w:150,h:20},
+        {x:4920,y:210,w:150,h:20},
+        {x:5220,y:330,w:150,h:20},
+        {x:5500,y:220,w:150,h:20}
+    ],
+
+    coins:[
+        {x:270,y:300},
+        {x:750,y:260},
+        {x:1010,y:160},
+        {x:1310,y:290},
+        {x:1560,y:180},
+        {x:1860,y:290},
+        {x:2120,y:170},
+        {x:2410,y:290},
+        {x:2680,y:170},
+        {x:3010,y:290},
+        {x:3270,y:170},
+        {x:3560,y:290},
+        {x:3830,y:170},
+        {x:4120,y:290},
+        {x:4400,y:170},
+        {x:4700,y:290},
+        {x:4970,y:170},
+        {x:5270,y:290},
+        {x:5550,y:180},
+        {x:6200,y:420}
+    ],
+
+    enemies:[
+        {x:700,y:430,w:35,h:40,speed:2.7,type:"fast"},
+        {x:1250,y:430,w:35,h:40,speed:2.7,type:"jumper"},
+        {x:1800,y:430,w:35,h:40,speed:2.8,type:"fast"},
+        {x:2350,y:430,w:35,h:40,speed:2.8,type:"jumper"},
+        {x:2950,y:430,w:35,h:40,speed:2.9,type:"fast"},
+        {x:3500,y:430,w:35,h:40,speed:2.9,type:"jumper"},
+        {x:4050,y:430,w:35,h:40,speed:3,type:"fast"},
+        {x:4650,y:430,w:35,h:40,speed:3,type:"jumper"},
+        {x:5200,y:430,w:35,h:40,speed:3.1,type:"fast"},
+        {x:5750,y:430,w:35,h:40,speed:3.2,type:"fast"},
+        {x:6100,y:270,w:35,h:40,speed:2,type:"flyer"},
+        {x:6400,y:270,w:35,h:40,speed:2,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:450,y:450,w:50,h:20},
+        {x:1050,y:450,w:60,h:20},
+        {x:1600,y:450,w:60,h:20},
+        {x:2130,y:450,w:70,h:20},
+        {x:2720,y:450,w:70,h:20},
+        {x:3320,y:450,w:70,h:20},
+        {x:3880,y:450,w:70,h:20},
+        {x:4450,y:450,w:70,h:20},
+        {x:5030,y:450,w:70,h:20},
+        {x:5600,y:450,w:80,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:500,y:350,w:100,h:18,minX:500,maxX:620,speed:2.5,direction:1},
+        {x:1050,y:300,w:100,h:18,minX:1050,maxX:1170,speed:2.6,direction:1},
+        {x:1600,y:300,w:100,h:18,minX:1600,maxX:1720,speed:2.7,direction:1},
+        {x:2720,y:300,w:100,h:18,minX:2720,maxX:2840,speed:2.8,direction:1},
+        {x:3900,y:300,w:100,h:18,minX:3900,maxX:4020,speed:2.9,direction:1},
+        {x:5000,y:300,w:100,h:18,minX:5000,maxX:5120,speed:3,direction:1}
+    ],
+
+    goal:{x:6600,y:390}
+},
+
+
+/* =========================================================
+   LEVEL 10 - FINAL BOSS
+========================================================= */
+
+{
+    name:"Den sista fästningen",
+    theme:"final",
+    width:7200,
+
+    spawn:{x:100,y:300},
+
+    platforms:[
+        {x:0,y:470,w:500,h:90},
+        {x:650,y:470,w:400,h:90},
+        {x:1200,y:470,w:400,h:90},
+        {x:1750,y:470,w:400,h:90},
+        {x:2300,y:470,w:400,h:90},
+        {x:2850,y:470,w:400,h:90},
+        {x:3400,y:470,w:400,h:90},
+        {x:3950,y:470,w:400,h:90},
+        {x:4500,y:470,w:400,h:90},
+        {x:5050,y:470,w:400,h:90},
+        {x:5600,y:470,w:400,h:90},
+        {x:6150,y:470,w:1050,h:90},
+
+        {x:200,y:340,w:140,h:20},
+        {x:700,y:300,w:150,h:20},
+        {x:960,y:190,w:150,h:20},
+        {x:1260,y:330,w:150,h:20},
+        {x:1520,y:210,w:150,h:20},
+        {x:1810,y:330,w:150,h:20},
+        {x:2080,y:200,w:150,h:20},
+        {x:2360,y:330,w:150,h:20},
+        {x:2630,y:200,w:150,h:20},
+        {x:2910,y:330,w:150,h:20},
+        {x:3180,y:200,w:150,h:20},
+        {x:3460,y:330,w:150,h:20},
+        {x:3730,y:200,w:150,h:20},
+        {x:4010,y:330,w:150,h:20},
+        {x:4280,y:200,w:150,h:20},
+        {x:4560,y:330,w:150,h:20},
+        {x:4830,y:200,w:150,h:20},
+        {x:5110,y:330,w:150,h:20},
+        {x:5380,y:200,w:150,h:20},
+        {x:5680,y:330,w:150,h:20},
+        {x:5950,y:230,w:150,h:20}
+    ],
+
+    coins:[
+        {x:250,y:300},
+        {x:750,y:260},
+        {x:1010,y:150},
+        {x:1310,y:290},
+        {x:1570,y:170},
+        {x:1860,y:290},
+        {x:2130,y:160},
+        {x:2410,y:290},
+        {x:2680,y:160},
+        {x:2960,y:290},
+        {x:3230,y:160},
+        {x:3510,y:290},
+        {x:3780,y:160},
+        {x:4060,y:290},
+        {x:4330,y:160},
+        {x:4610,y:290},
+        {x:4880,y:160},
+        {x:5160,y:290},
+        {x:5430,y:160},
+        {x:5730,y:290},
+        {x:6000,y:190},
+        {x:6400,y:420},
+        {x:6800,y:420}
+    ],
+
+    enemies:[
+        {x:700,y:430,w:35,h:40,speed:2.8,type:"fast"},
+        {x:1250,y:430,w:35,h:40,speed:2.8,type:"jumper"},
+        {x:1800,y:430,w:35,h:40,speed:2.9,type:"fast"},
+        {x:2350,y:430,w:35,h:40,speed:2.9,type:"jumper"},
+        {x:2900,y:430,w:35,h:40,speed:3,type:"fast"},
+        {x:3450,y:430,w:35,h:40,speed:3,type:"jumper"},
+        {x:4000,y:430,w:35,h:40,speed:3.1,type:"fast"},
+        {x:4550,y:430,w:35,h:40,speed:3.1,type:"jumper"},
+        {x:5100,y:430,w:35,h:40,speed:3.2,type:"fast"},
+        {x:5650,y:430,w:35,h:40,speed:3.2,type:"jumper"},
+        {x:6250,y:430,w:35,h:40,speed:3.3,type:"fast"},
+        {x:6500,y:280,w:35,h:40,speed:2,type:"flyer"},
+        {x:6900,y:280,w:35,h:40,speed:2.2,type:"flyer"}
+    ],
+
+    spikes:[
+        {x:450,y:450,w:50,h:20},
+        {x:1050,y:450,w:60,h:20},
+        {x:1600,y:450,w:60,h:20},
+        {x:2150,y:450,w:70,h:20},
+        {x:2700,y:450,w:70,h:20},
+        {x:3250,y:450,w:70,h:20},
+        {x:3800,y:450,w:70,h:20},
+        {x:4350,y:450,w:70,h:20},
+        {x:4900,y:450,w:70,h:20},
+        {x:5450,y:450,w:70,h:20},
+        {x:6000,y:450,w:80,h:20}
+    ],
+
+    movingPlatforms:[
+        {x:500,y:350,w:100,h:18,minX:500,maxX:620,speed:2.7,direction:1},
+        {x:1050,y:300,w:100,h:18,minX:1050,maxX:1170,speed:2.8,direction:1},
+        {x:1600,y:300,w:100,h:18,minX:1600,maxX:1720,speed:2.9,direction:1},
+        {x:2150,y:300,w:100,h:18,minX:2150,maxX:2270,speed:3,direction:1},
+        {x:2700,y:300,w:100,h:18,minX:2700,maxX:2820,speed:3,direction:1},
+        {x:3800,y:300,w:100,h:18,minX:3800,maxX:3920,speed:3.1,direction:1},
+        {x:4900,y:300,w:100,h:18,minX:4900,maxX:5020,speed:3.2,direction:1},
+        {x:5450,y:300,w:100,h:18,minX:5450,maxX:5570,speed:3.2,direction:1}
+    ],
+
+    boss:{
+        x:6400,
+        y:300,
+        width:150,
+        height:170,
+        health:12,
+        maxHealth:12,
+        direction:-1,
+        speed:1.8,
+        type:"final"
+    },
+
+    goal:{x:7000,y:390}
 }
 
 ];
 
 
-/* =========================
-   LEVEL DATA
-========================= */
-
-let levelCoins = [];
-let levelEnemies = [];
-let boss = null;
-
-
-/* =========================
+/* =========================================================
    LOAD LEVEL
-========================= */
+========================================================= */
 
 function loadLevel(index){
 
-    currentLevel = index;
+    currentLevel=index;
 
-    const level = levels[index];
+    const level=levels[index];
 
-    player.x = level.spawn.x;
-    player.y = level.spawn.y;
+    player.x=level.spawn.x;
+    player.y=level.spawn.y;
 
-    player.velocityX = 0;
-    player.velocityY = 0;
+    player.velocityX=0;
+    player.velocityY=0;
 
-    player.invincible = 0;
+    player.invincible=0;
+    player.coyoteTimer=0;
+    player.jumpBufferTimer=0;
 
-    player.coyoteTimer = 0;
-    player.jumpBufferTimer = 0;
+    player.grounded=false;
+    player.jumpsLeft=1;
 
-    player.grounded = false;
-    player.jumpsLeft = 1;
-
-    levelCoins = level.coins.map(c => ({
+    levelCoins=level.coins.map(c=>({
         ...c,
         collected:false,
         animation:Math.random()*Math.PI*2
     }));
 
-    levelEnemies = level.enemies.map(e => ({
+    levelEnemies=level.enemies.map(e=>({
         ...e,
         startX:e.x,
+        startY:e.y,
         direction:1,
-        alive:true
+        alive:true,
+        jumpTimer:Math.random()*100,
+        animation:Math.random()*Math.PI*2
     }));
 
-    boss = level.boss
+    levelSpikes=(level.spikes || []).map(s=>({...s}));
+
+    levelMovingPlatforms=
+        (level.movingPlatforms || []).map(p=>({...p}));
+
+    levelProjectiles=[];
+
+    boss=level.boss
         ? {
             ...level.boss,
             health:level.boss.maxHealth,
-            direction:-1
+            direction:-1,
+            attackTimer:90,
+            hitFlash:0,
+            phase:0
         }
         : null;
 
-
     if(level.secretBlock){
 
-        level.secretBlock.activated = false;
+        level.secretBlock.activated=false;
 
-        level.secretKey.visible = false;
-        level.secretKey.collected = false;
-        level.secretKey.velocityY = 0;
+        level.secretKey.visible=false;
+        level.secretKey.collected=false;
+        level.secretKey.velocityY=0;
 
-        level.secretDoor.opened = false;
+        level.secretDoor.opened=false;
 
-        level.secretRoom.active = false;
-        level.secretRoom.chestOpened = false;
-        level.secretRoom.medalCollected = false;
+        level.secretRoom.active=false;
+        level.secretRoom.chestOpened=false;
+        level.secretRoom.medalCollected=false;
     }
 
+    secretRoomActive=false;
 
-    secretRoomActive = false;
-    secretMedalCollected = false;
-    secretChestOpened = false;
+    keyPickupTimer=0;
 
-    keyPickupTimer = 0;
+    cameraX=0;
 
-    cameraX = 0;
-
-    levelElement.textContent = currentLevel + 1;
+    levelElement.textContent=currentLevel+1;
 
     hideMessage();
 }
 
 
-/* =========================
+/* =========================================================
    HELPERS
-========================= */
+========================================================= */
 
 function rectsOverlap(a,b){
 
-    return (
+    return(
         a.x < b.x+b.width &&
         a.x+a.width > b.x &&
         a.y < b.y+b.height &&
@@ -827,107 +1524,166 @@ function clamp(v,min,max){
 }
 
 
-/* =========================
+/* =========================================================
+   MOVING PLATFORMS
+========================================================= */
+
+function updateMovingPlatforms(){
+
+    for(const p of levelMovingPlatforms){
+
+        p.x+=p.speed*p.direction;
+
+        if(p.x<=p.minX){
+
+            p.x=p.minX;
+            p.direction=1;
+        }
+
+        if(p.x>=p.maxX){
+
+            p.x=p.maxX;
+            p.direction=-1;
+        }
+    }
+}
+
+function drawMovingPlatforms(){
+
+    for(const p of levelMovingPlatforms){
+
+        const x=p.x-cameraX;
+
+        if(x+p.w<0 || x>canvas.width){
+            continue;
+        }
+
+        ctx.fillStyle="#454545";
+
+        ctx.fillRect(
+            x,
+            p.y,
+            p.w,
+            p.h
+        );
+
+        ctx.fillStyle="#ffd54a";
+
+        ctx.fillRect(
+            x,
+            p.y,
+            p.w,
+            5
+        );
+
+        ctx.fillStyle="#222";
+
+        for(let i=10;i<p.w;i+=25){
+
+            ctx.fillRect(
+                x+i,
+                p.y+8,
+                12,
+                5
+            );
+        }
+    }
+}
+
+
+/* =========================================================
    PLAYER UPDATE
-========================= */
+========================================================= */
 
 function updatePlayer(){
 
     if(secretRoomActive){
 
         updateSecretRoomPlayer();
-
         return;
     }
 
-
     if(
         !gameRunning ||
-        levelCompleteTimer > 0
+        levelCompleteTimer>0
     ){
         return;
     }
 
+    const level=levels[currentLevel];
 
-    const level = levels[currentLevel];
-
-    const previousY = player.y;
-    const previousBottom = previousY + player.height;
-
+    const previousY=player.y;
+    const previousBottom=
+        previousY+player.height;
 
     if(player.grounded){
 
-        player.coyoteTimer = 8;
-        player.jumpsLeft = 1;
+        player.coyoteTimer=8;
+        player.jumpsLeft=1;
 
     }else{
 
         player.coyoteTimer--;
     }
 
-
     if(jumpPressed){
 
-        player.jumpBufferTimer = 8;
-
-        jumpPressed = false;
+        player.jumpBufferTimer=8;
+        jumpPressed=false;
 
     }else{
 
         player.jumpBufferTimer--;
     }
 
-
-    const left =
+    const left=
         keys.KeyA ||
         keys.ArrowLeft;
 
-    const right =
+    const right=
         keys.KeyD ||
         keys.ArrowRight;
 
-
     if(left && !right){
 
-        player.velocityX =
+        player.velocityX=
             Math.max(
                 -player.maxSpeed,
                 player.velocityX-player.acceleration
             );
 
-        player.direction = -1;
+        player.direction=-1;
 
     }else if(right && !left){
 
-        player.velocityX =
+        player.velocityX=
             Math.min(
                 player.maxSpeed,
                 player.velocityX+player.acceleration
             );
 
-        player.direction = 1;
+        player.direction=1;
 
     }else{
 
-        player.velocityX = 0;
+        player.velocityX=0;
     }
 
-
     if(
-        player.jumpBufferTimer > 0 &&
+        player.jumpBufferTimer>0 &&
         (
             player.grounded ||
-            player.coyoteTimer > 0
+            player.coyoteTimer>0
         )
     ){
 
-        player.velocityY =
+        player.velocityY=
             -player.jumpPower;
 
-        player.grounded = false;
+        player.grounded=false;
 
-        player.coyoteTimer = 0;
-        player.jumpBufferTimer = 0;
+        player.coyoteTimer=0;
+        player.jumpBufferTimer=0;
 
         playSound(
             500,
@@ -937,54 +1693,48 @@ function updatePlayer(){
         );
     }
 
+    player.x+=player.velocityX;
 
-    player.x += player.velocityX;
+    player.velocityY+=player.gravity;
 
-    player.velocityY += player.gravity;
-
-
-    const jumpHeld =
+    const jumpHeld=
         keys.Space ||
         keys.ArrowUp ||
         keys.KeyW;
 
-
     if(
         !jumpHeld &&
-        player.velocityY < -5
+        player.velocityY<-5
     ){
 
-        player.velocityY += .35;
+        player.velocityY+=.35;
     }
 
+    player.y+=player.velocityY;
 
-    player.y += player.velocityY;
-
-    player.grounded = false;
-
+    player.grounded=false;
 
     for(const p of level.platforms){
 
-        const rightEdge =
-            player.x + player.width;
+        const rightEdge=
+            player.x+player.width;
 
-        const playerBottom =
-            player.y + player.height;
+        const playerBottom=
+            player.y+player.height;
 
-        const platformRight =
-            p.x + p.w;
+        const platformRight=
+            p.x+p.w;
 
-        const falling =
-            player.velocityY >= 0;
+        const falling=
+            player.velocityY>=0;
 
-        const horizontal =
-            rightEdge > p.x &&
-            player.x < platformRight;
+        const horizontal=
+            rightEdge>p.x &&
+            player.x<platformRight;
 
-        const crossingTop =
-            previousBottom <= p.y &&
-            playerBottom >= p.y;
-
+        const crossingTop=
+            previousBottom<=p.y &&
+            playerBottom>=p.y;
 
         if(
             falling &&
@@ -992,59 +1742,83 @@ function updatePlayer(){
             crossingTop
         ){
 
-            player.y =
-                p.y-player.height;
+            player.y=p.y-player.height;
 
-            player.velocityY = 0;
-
-            player.grounded = true;
-
-            player.jumpsLeft = 1;
+            player.velocityY=0;
+            player.grounded=true;
+            player.jumpsLeft=1;
         }
 
-
-        const hittingBottom =
-            player.velocityY < 0 &&
-            previousY >= p.y+p.h &&
-            player.y <= p.y+p.h;
-
+        const hittingBottom=
+            player.velocityY<0 &&
+            previousY>=p.y+p.h &&
+            player.y<=p.y+p.h;
 
         if(
             hittingBottom &&
             horizontal
         ){
 
-            player.y =
-                p.y+p.h;
-
-            player.velocityY = 0;
+            player.y=p.y+p.h;
+            player.velocityY=0;
         }
     }
 
+    for(const p of levelMovingPlatforms){
 
-    player.x = clamp(
+        const rightEdge=
+            player.x+player.width;
+
+        const playerBottom=
+            player.y+player.height;
+
+        const platformRight=
+            p.x+p.w;
+
+        const falling=
+            player.velocityY>=0;
+
+        const horizontal=
+            rightEdge>p.x &&
+            player.x<platformRight;
+
+        const crossingTop=
+            previousBottom<=p.y &&
+            playerBottom>=p.y;
+
+        if(
+            falling &&
+            horizontal &&
+            crossingTop
+        ){
+
+            player.y=p.y-player.height;
+            player.velocityY=0;
+            player.grounded=true;
+            player.jumpsLeft=1;
+        }
+    }
+
+    player.x=clamp(
         player.x,
         0,
         level.width-player.width
     );
 
-
-    if(
-        player.y >
-        canvas.height+80
-    ){
+    if(player.y>canvas.height+80){
 
         loseLife();
-
         return;
     }
 
+
+    /* COINS */
 
     for(const coin of levelCoins){
 
         if(coin.collected) continue;
 
-        const box = {
+        const box={
             x:coin.x-12,
             y:coin.y-12,
             width:24,
@@ -1053,10 +1827,10 @@ function updatePlayer(){
 
         if(rectsOverlap(player,box)){
 
-            coin.collected = true;
+            coin.collected=true;
 
             coins++;
-            score += 100;
+            score+=100;
 
             playSound(
                 850,
@@ -1068,49 +1842,56 @@ function updatePlayer(){
     }
 
 
+    /* SPIKES */
+
+    for(const spike of levelSpikes){
+
+        const box={
+            x:spike.x+5,
+            y:spike.y+6,
+            width:spike.w-10,
+            height:spike.h-6
+        };
+
+        if(rectsOverlap(player,box)){
+
+            hurtPlayer();
+            return;
+        }
+    }
+
+
+    /* ENEMIES */
+
+    updateEnemies();
+
+
     for(const enemy of levelEnemies){
 
         if(!enemy.alive) continue;
 
-        enemy.x +=
-            enemy.speed *
-            enemy.direction;
-
-
-        if(
-            Math.abs(
-                enemy.x-enemy.startX
-            ) > 90
-        ){
-
-            enemy.direction *= -1;
-        }
-
-
-        const box = {
+        const box={
             x:enemy.x,
             y:enemy.y,
             width:enemy.w,
             height:enemy.h
         };
 
-
         if(rectsOverlap(player,box)){
 
-            const stomp =
-                player.velocityY > 0 &&
+            const stomp=
+                player.velocityY>0 &&
                 player.y+
                 player.height-
-                enemy.y < 20;
-
+                enemy.y<22;
 
             if(stomp){
 
-                enemy.alive = false;
+                enemy.alive=false;
 
-                player.velocityY = -9;
+                player.velocityY=-9;
 
-                score += 250;
+                score+=250;
 
                 playSound(
                     220,
@@ -1119,49 +1900,88 @@ function updatePlayer(){
                     .05
                 );
 
+                createKeySparkles(
+                    enemy.x+enemy.w/2,
+                    enemy.y+10
+                );
+
             }else{
 
                 hurtPlayer();
+                return;
             }
         }
     }
 
 
-    if(
-        boss &&
-        boss.health > 0
+    /* PROJECTILES */
+
+    for(
+        let i=levelProjectiles.length-1;
+        i>=0;
+        i--
     ){
 
-        boss.x +=
-            boss.speed *
-            boss.direction;
+        const p=levelProjectiles[i];
 
+        p.x+=p.velocityX;
+        p.y+=p.velocityY;
+
+        p.life--;
 
         if(
-            boss.x < 4300 ||
-            boss.x > 4750
+            p.life<=0 ||
+            p.x<cameraX-100 ||
+            p.x>cameraX+canvas.width+200
         ){
 
-            boss.direction *= -1;
+            levelProjectiles.splice(i,1);
+            continue;
         }
 
+        const box={
+            x:p.x-8,
+            y:p.y-8,
+            width:16,
+            height:16
+        };
+
+        if(rectsOverlap(player,box)){
+
+            levelProjectiles.splice(i,1);
+
+            hurtPlayer();
+            return;
+        }
+    }
+
+
+    /* BOSS */
+
+    updateBoss();
+
+    if(
+        boss &&
+        boss.health>0
+    ){
 
         if(rectsOverlap(player,boss)){
 
-            const stomp =
-                player.velocityY > 0 &&
+            const stomp=
+                player.velocityY>0 &&
                 player.y+
                 player.height-
-                boss.y < 25;
-
+                boss.y<30;
 
             if(stomp){
 
                 boss.health--;
 
-                player.velocityY = -11;
+                boss.hitFlash=8;
 
-                score += 500;
+                player.velocityY=-11;
+
+                score+=500;
 
                 playSound(
                     180,
@@ -1170,16 +1990,15 @@ function updatePlayer(){
                     .07
                 );
 
+                if(boss.health<=0){
 
-                if(boss.health <= 0){
+                    score+=5000;
 
-                    score += 2000;
-
-                    createConfetti(80);
+                    createConfetti(150);
 
                     playSound(
                         100,
-                        .5,
+                        .7,
                         "sawtooth",
                         .08
                     );
@@ -1188,12 +2007,15 @@ function updatePlayer(){
             }else{
 
                 hurtPlayer();
+                return;
             }
         }
     }
 
 
-    if(currentLevel === 1){
+    /* LEVEL 2 SECRET */
+
+    if(currentLevel===1){
 
         updateLevel2Secret(
             level,
@@ -1202,24 +2024,22 @@ function updatePlayer(){
     }
 
 
-    const goal = level.goal;
+    /* GOAL */
 
-    const goalBox = {
+    const goal=level.goal;
+
+    const goalBox={
         x:goal.x,
         y:goal.y,
         width:40,
         height:80
     };
 
-
     if(
-        rectsOverlap(
-            player,
-            goalBox
-        ) &&
+        rectsOverlap(player,goalBox) &&
         (
             !boss ||
-            boss.health <= 0
+            boss.health<=0
         )
     ){
 
@@ -1228,58 +2048,236 @@ function updatePlayer(){
 
 
     if(
-        Math.abs(player.velocityX) > .1 &&
+        Math.abs(player.velocityX)>.1 &&
         player.grounded
     ){
 
-        player.walkAnimation += .2;
+        player.walkAnimation+=.2;
 
     }else{
 
-        player.walkAnimation = 0;
+        player.walkAnimation=0;
     }
 
-
-    if(player.invincible > 0){
-
+    if(player.invincible>0){
         player.invincible--;
     }
 }
 
 
-/* =========================
+/* =========================================================
+   ENEMY UPDATE
+========================================================= */
+
+function updateEnemies(){
+
+    for(const enemy of levelEnemies){
+
+        if(!enemy.alive) continue;
+
+        enemy.animation+=.08;
+
+        if(enemy.type==="walker"){
+
+            enemy.x+=
+                enemy.speed*
+                enemy.direction;
+
+            if(
+                Math.abs(
+                    enemy.x-enemy.startX
+                )>90
+            ){
+
+                enemy.direction*=-1;
+            }
+        }
+
+
+        else if(enemy.type==="fast"){
+
+            enemy.x+=
+                enemy.speed*
+                enemy.direction;
+
+            if(
+                Math.abs(
+                    enemy.x-enemy.startX
+                )>120
+            ){
+
+                enemy.direction*=-1;
+            }
+        }
+
+
+        else if(enemy.type==="jumper"){
+
+            enemy.x+=
+                enemy.speed*
+                enemy.direction;
+
+            if(
+                Math.abs(
+                    enemy.x-enemy.startX
+                )>100
+            ){
+
+                enemy.direction*=-1;
+            }
+
+            enemy.jumpTimer--;
+
+            if(enemy.jumpTimer<=0){
+
+                enemy.y=390;
+
+                enemy.jumpTimer=
+                    80+
+                    Math.random()*80;
+
+            }else{
+
+                if(enemy.y>400){
+
+                    enemy.y-=3;
+                }else{
+
+                    enemy.y+=3;
+                }
+            }
+        }
+
+
+        else if(enemy.type==="flyer"){
+
+            enemy.x+=
+                enemy.speed*
+                enemy.direction;
+
+            enemy.y=
+                enemy.startY+
+                Math.sin(
+                    Date.now()*.004+
+                    enemy.animation
+                )*55;
+
+            if(
+                Math.abs(
+                    enemy.x-enemy.startX
+                )>130
+            ){
+
+                enemy.direction*=-1;
+            }
+        }
+    }
+}
+
+
+/* =========================================================
+   BOSS UPDATE
+========================================================= */
+
+function updateBoss(){
+
+    if(!boss || boss.health<=0){
+        return;
+    }
+
+    boss.hitFlash--;
+
+    boss.x+=
+        boss.speed*
+        boss.direction;
+
+    const minX=
+        Math.max(
+            6000,
+            levels[currentLevel].width-850
+        );
+
+    const maxX=
+        levels[currentLevel].width-300;
+
+    if(
+        boss.x<minX ||
+        boss.x>maxX
+    ){
+
+        boss.direction*=-1;
+    }
+
+    boss.attackTimer--;
+
+    if(boss.attackTimer<=0){
+
+        boss.attackTimer=
+            currentLevel===9
+            ? 55
+            : 75;
+
+        boss.phase++;
+
+        const shots=
+            currentLevel===9
+            ? 3
+            : 2;
+
+        for(let i=0;i<shots;i++){
+
+            levelProjectiles.push({
+
+                x:boss.x+
+                    boss.width/2,
+
+                y:boss.y+
+                    boss.height/2,
+
+                velocityX:
+                    -5-
+                    Math.random()*2,
+
+                velocityY:
+                    (i-((shots-1)/2))*1.7,
+
+                life:180,
+
+                type:"fire"
+            });
+        }
+
+        playSound(
+            90,
+            .12,
+            "sawtooth",
+            .04
+        );
+    }
+}
+
+
+/* =========================================================
    LEVEL 2 SECRET
-========================= */
+========================================================= */
 
 function updateLevel2Secret(
     level,
     previousY
 ){
 
-    const block =
-        level.secretBlock;
+    const block=level.secretBlock;
+    const key=level.secretKey;
+    const door=level.secretDoor;
 
-    const key =
-        level.secretKey;
+    const horizontal=
+        player.x+player.width>block.x &&
+        player.x<block.x+block.width;
 
-    const door =
-        level.secretDoor;
-
-
-    const horizontal =
-        player.x+player.width >
-        block.x &&
-        player.x <
-        block.x+block.width;
-
-
-    const underside =
-        player.velocityY < 0 &&
-        previousY >=
-        block.y+block.height &&
-        player.y <=
-        block.y+block.height;
-
+    const underside=
+        player.velocityY<0 &&
+        previousY>=block.y+block.height &&
+        player.y<=block.y+block.height;
 
     if(
         !block.activated &&
@@ -1287,19 +2285,16 @@ function updateLevel2Secret(
         underside
     ){
 
-        block.activated = true;
+        block.activated=true;
 
-        key.visible = true;
+        key.visible=true;
 
-        key.x =
-            block.x+21;
+        key.x=block.x+21;
+        key.y=block.y-28;
 
-        key.y =
-            block.y-28;
+        key.velocityY=-3;
 
-        key.velocityY = -3;
-
-        score += 300;
+        score+=300;
 
         playSound(
             700,
@@ -1315,44 +2310,31 @@ function updateLevel2Secret(
     }
 
 
-    /*
-        NYCKEL FALLER
-    */
-
     if(
         key.visible &&
         !key.collected
     ){
 
-        if(key.y < 420){
+        if(key.y<420){
 
-            key.velocityY += .25;
-
-            key.y +=
-                key.velocityY;
+            key.velocityY+=.25;
+            key.y+=key.velocityY;
         }
 
-
-        const keyBox = {
-            x:key.x-12,
-            y:key.y-14,
-            width:42,
-            height:48
+        const keyBox={
+            x:key.x-15,
+            y:key.y-18,
+            width:50,
+            height:55
         };
 
+        if(rectsOverlap(player,keyBox)){
 
-        if(
-            rectsOverlap(
-                player,
-                keyBox
-            )
-        ){
+            key.collected=true;
 
-            key.collected = true;
+            score+=500;
 
-            score += 500;
-
-            keyPickupTimer = 150;
+            keyPickupTimer=150;
 
             createKeySparkles(
                 key.x,
@@ -1376,11 +2358,7 @@ function updateLevel2Secret(
     }
 
 
-    /*
-        HEMLIGA DÖRREN
-    */
-
-    const nearDoor =
+    const nearDoor=
         rectsOverlap(
             player,
             {
@@ -1391,7 +2369,6 @@ function updateLevel2Secret(
             }
         );
 
-
     if(
         !door.opened &&
         key.collected &&
@@ -1400,9 +2377,9 @@ function updateLevel2Secret(
 
         if(interactPressed){
 
-            door.opened = true;
+            door.opened=true;
 
-            interactPressed = false;
+            interactPressed=false;
 
             playSound(
                 650,
@@ -1413,14 +2390,13 @@ function updateLevel2Secret(
         }
     }
 
-
     else if(
         door.opened &&
         nearDoor &&
         interactPressed
     ){
 
-        interactPressed = false;
+        interactPressed=false;
 
         enterSecretRoom();
 
@@ -1429,91 +2405,15 @@ function updateLevel2Secret(
 }
 
 
-/* =========================
-   SECRET ROOM PLAYER
-========================= */
-
-function updateSecretRoomPlayer(){
-
-    if(!secretRoomActive){
-        return;
-    }
-
-
-    const left =
-        keys.KeyA ||
-        keys.ArrowLeft;
-
-    const right =
-        keys.KeyD ||
-        keys.ArrowRight;
-
-
-    if(left && !right){
-
-        player.x -= 4;
-
-        player.direction = -1;
-
-    }else if(right && !left){
-
-        player.x += 4;
-
-        player.direction = 1;
-    }
-
-
-    player.x = clamp(
-        player.x,
-        110,
-        850
-    );
-
-
-    player.y = 350;
-
-
-    const level =
-        levels[currentLevel];
-
-
-    if(interactPressed){
-
-        interactPressed = false;
-
-
-        if(player.x < 220){
-
-            exitSecretRoom();
-
-            return;
-        }
-
-
-        if(
-            !level.secretRoom.chestOpened &&
-            player.x > 385 &&
-            player.x < 590
-        ){
-
-            openSecretChest();
-
-            return;
-        }
-    }
-}
-
-
-/* =========================
+/* =========================================================
    DAMAGE
-========================= */
+========================================================= */
 
 function hurtPlayer(){
 
-    if(player.invincible > 0){
+    if(player.invincible>0){
         return;
     }
-
 
     lives--;
 
@@ -1524,43 +2424,30 @@ function hurtPlayer(){
         .06
     );
 
+    player.invincible=100;
 
-    player.invincible = 100;
+    livesElement.textContent=lives;
 
-    livesElement.textContent =
-        lives;
-
-
-    if(lives <= 0){
+    if(lives<=0){
 
         gameOver();
-
         return;
     }
 
+    const level=levels[currentLevel];
 
-    const level =
-        levels[currentLevel];
+    player.x=level.spawn.x;
+    player.y=level.spawn.y;
 
-
-    player.x =
-        level.spawn.x;
-
-    player.y =
-        level.spawn.y;
-
-    player.velocityX = 0;
-    player.velocityY = 0;
+    player.velocityX=0;
+    player.velocityY=0;
 }
-
 
 function loseLife(){
 
     lives--;
 
-    livesElement.textContent =
-        lives;
-
+    livesElement.textContent=lives;
 
     playSound(
         100,
@@ -1568,7 +2455,6 @@ function loseLife(){
         "sawtooth",
         .07
     );
-
 
     for(let i=0;i<20;i++){
 
@@ -1579,8 +2465,7 @@ function loseLife(){
                 cameraX+
                 player.width/2,
 
-            y:
-                player.y,
+            y:player.y,
 
             velocityX:
                 (Math.random()-.5)*6,
@@ -1606,62 +2491,50 @@ function loseLife(){
         });
     }
 
-
-    if(lives <= 0){
+    if(lives<=0){
 
         gameOver();
-
         return;
     }
 
+    const level=levels[currentLevel];
 
-    const level =
-        levels[currentLevel];
+    player.x=level.spawn.x;
+    player.y=level.spawn.y;
 
+    player.velocityX=0;
+    player.velocityY=0;
 
-    player.x =
-        level.spawn.x;
-
-    player.y =
-        level.spawn.y;
-
-    player.velocityX = 0;
-    player.velocityY = 0;
-
-    player.invincible = 100;
+    player.invincible=100;
 }
 
 
-/* =========================
+/* =========================================================
    LAVA
-========================= */
+========================================================= */
 
 function drawLava(){
 
-    const level =
-        levels[currentLevel];
+    const level=levels[currentLevel];
 
-    const lavaTop = 470;
+    const lavaTop=470;
 
-
-    const ground =
+    const ground=
         level.platforms
         .filter(
             p =>
-                p.y === lavaTop &&
-                p.h >= 50
+                p.y===lavaTop &&
+                p.h>=50
         )
         .sort(
             (a,b)=>a.x-b.x
         );
 
-
-    let end = 0;
-
+    let end=0;
 
     for(const p of ground){
 
-        if(p.x > end){
+        if(p.x>end){
 
             drawLavaHole(
                 end,
@@ -1669,12 +2542,10 @@ function drawLava(){
             );
         }
 
-        end =
-            p.x+p.w;
+        end=p.x+p.w;
     }
 
-
-    if(level.width > end){
+    if(level.width>end){
 
         drawLavaHole(
             end,
@@ -1683,42 +2554,26 @@ function drawLava(){
     }
 }
 
-
 function drawLavaHole(
     worldStart,
     worldEnd
 ){
 
-    const s =
-        worldStart-cameraX;
-
-    const e =
-        worldEnd-cameraX;
-
+    const s=worldStart-cameraX;
+    const e=worldEnd-cameraX;
 
     if(
-        e < 0 ||
-        s > canvas.width
+        e<0 ||
+        s>canvas.width
     ){
-
         return;
     }
 
+    const vs=Math.max(0,s);
+    const ve=Math.min(canvas.width,e);
+    const w=ve-vs;
 
-    const vs =
-        Math.max(0,s);
-
-    const ve =
-        Math.min(
-            canvas.width,
-            e
-        );
-
-    const w =
-        ve-vs;
-
-
-    const gradient =
+    const gradient=
         ctx.createLinearGradient(
             0,
             470,
@@ -1726,30 +2581,12 @@ function drawLavaHole(
             canvas.height
         );
 
+    gradient.addColorStop(0,"#ff6500");
+    gradient.addColorStop(.2,"#e52d00");
+    gradient.addColorStop(.65,"#850b00");
+    gradient.addColorStop(1,"#220000");
 
-    gradient.addColorStop(
-        0,
-        "#ff6500"
-    );
-
-    gradient.addColorStop(
-        .2,
-        "#e52d00"
-    );
-
-    gradient.addColorStop(
-        .65,
-        "#850b00"
-    );
-
-    gradient.addColorStop(
-        1,
-        "#220000"
-    );
-
-
-    ctx.fillStyle =
-        gradient;
+    ctx.fillStyle=gradient;
 
     ctx.fillRect(
         vs,
@@ -1758,54 +2595,11 @@ function drawLavaHole(
         canvas.height-470
     );
 
-
-    const glow =
-        ctx.createLinearGradient(
-            0,
-            450,
-            0,
-            485
-        );
-
-
-    glow.addColorStop(
-        0,
-        "rgba(255,60,0,0)"
-    );
-
-    glow.addColorStop(
-        .5,
-        "rgba(255,100,0,.8)"
-    );
-
-    glow.addColorStop(
-        1,
-        "rgba(255,30,0,0)"
-    );
-
-
-    ctx.fillStyle =
-        glow;
-
-    ctx.fillRect(
-        vs,
-        450,
-        w,
-        40
-    );
-
-
-    const time =
-        Date.now()*.003;
-
+    const time=Date.now()*.003;
 
     ctx.beginPath();
 
-    ctx.moveTo(
-        vs,
-        470
-    );
-
+    ctx.moveTo(vs,470);
 
     for(
         let x=vs-20;
@@ -1813,15 +2607,9 @@ function drawLavaHole(
         x+=15
     ){
 
-        const wave =
-            Math.sin(
-                x*.035+time
-            )*4
-            +
-            Math.sin(
-                x*.015-time*1.4
-            )*3;
-
+        const wave=
+            Math.sin(x*.035+time)*4+
+            Math.sin(x*.015-time*1.4)*3;
 
         ctx.lineTo(
             x,
@@ -1829,25 +2617,13 @@ function drawLavaHole(
         );
     }
 
-
-    ctx.lineTo(
-        ve,
-        500
-    );
-
-    ctx.lineTo(
-        vs,
-        500
-    );
+    ctx.lineTo(ve,500);
+    ctx.lineTo(vs,500);
 
     ctx.closePath();
 
-
-    ctx.fillStyle =
-        "#ff4800";
-
+    ctx.fillStyle="#ff4800";
     ctx.fill();
-
 
     for(
         let x=vs;
@@ -1855,15 +2631,10 @@ function drawLavaHole(
         x+=45
     ){
 
-        const wave =
-            Math.sin(
-                x*.035+time
-            )*4;
+        const wave=
+            Math.sin(x*.035+time)*4;
 
-
-        ctx.fillStyle =
-            "#ffb000";
-
+        ctx.fillStyle="#ffb000";
 
         ctx.beginPath();
 
@@ -1882,17 +2653,15 @@ function drawLavaHole(
 }
 
 
-/* =========================
+/* =========================================================
    BACKGROUND
-========================= */
+========================================================= */
 
 function drawBackground(){
 
-    const level =
-        levels[currentLevel];
+    const level=levels[currentLevel];
 
-
-    const gradient =
+    const gradient=
         ctx.createLinearGradient(
             0,
             0,
@@ -1900,47 +2669,81 @@ function drawBackground(){
             canvas.height
         );
 
+    switch(level.theme){
 
-    if(currentLevel === 0){
+        case "green":
 
-        gradient.addColorStop(
-            0,
-            "#70c5ff"
-        );
+            gradient.addColorStop(0,"#70c5ff");
+            gradient.addColorStop(1,"#d6f5ff");
 
-        gradient.addColorStop(
-            1,
-            "#d6f5ff"
-        );
+            break;
 
-    }else if(currentLevel === 1){
+        case "crystal":
 
-        gradient.addColorStop(
-            0,
-            "#151c3b"
-        );
+            gradient.addColorStop(0,"#151c3b");
+            gradient.addColorStop(1,"#36245e");
 
-        gradient.addColorStop(
-            1,
-            "#36245e"
-        );
+            break;
 
-    }else{
+        case "dark":
 
-        gradient.addColorStop(
-            0,
-            "#100f1c"
-        );
+            gradient.addColorStop(0,"#100f1c");
+            gradient.addColorStop(1,"#241529");
 
-        gradient.addColorStop(
-            1,
-            "#241529"
-        );
+            break;
+
+        case "desert":
+
+            gradient.addColorStop(0,"#f2b66d");
+            gradient.addColorStop(1,"#7d3f32");
+
+            break;
+
+        case "fire":
+
+            gradient.addColorStop(0,"#250707");
+            gradient.addColorStop(1,"#8a1f0a");
+
+            break;
+
+        case "ice":
+
+            gradient.addColorStop(0,"#8ed8ff");
+            gradient.addColorStop(1,"#d9f7ff");
+
+            break;
+
+        case "city":
+
+            gradient.addColorStop(0,"#20243a");
+            gradient.addColorStop(1,"#080a13");
+
+            break;
+
+        case "volcano":
+
+            gradient.addColorStop(0,"#170607");
+            gradient.addColorStop(1,"#5e160b");
+
+            break;
+
+        case "shadow":
+
+            gradient.addColorStop(0,"#05050d");
+            gradient.addColorStop(1,"#17112a");
+
+            break;
+
+        case "final":
+
+            gradient.addColorStop(0,"#050008");
+            gradient.addColorStop(.5,"#28001e");
+            gradient.addColorStop(1,"#050008");
+
+            break;
     }
 
-
-    ctx.fillStyle =
-        gradient;
+    ctx.fillStyle=gradient;
 
     ctx.fillRect(
         0,
@@ -1950,11 +2753,76 @@ function drawBackground(){
     );
 
 
-    ctx.fillStyle =
-        currentLevel===0
-        ? "#6aa66a"
-        : "#29233f";
+    /* STJÄRNOR / PARTICLES */
 
+    if(
+        level.theme==="dark" ||
+        level.theme==="shadow" ||
+        level.theme==="final"
+    ){
+
+        for(let i=0;i<70;i++){
+
+            const x=
+                ((i*173-currentLevel*90)-
+                cameraX*.15)%canvas.width;
+
+            const y=
+                30+
+                ((i*71)%300);
+
+            ctx.fillStyle=
+                i%3===0
+                ? "#ffd700"
+                : "#aaa";
+
+            ctx.fillRect(
+                (x+canvas.width)%canvas.width,
+                y,
+                2,
+                2
+            );
+        }
+    }
+
+
+    /* BERG / SILHUETTER */
+
+    let backColor="#477047";
+
+    if(
+        level.theme==="desert"
+    ){
+        backColor="#a85d3a";
+    }
+
+    if(
+        level.theme==="ice"
+    ){
+        backColor="#72a9ba";
+    }
+
+    if(
+        level.theme==="city"
+    ){
+        backColor="#15182a";
+    }
+
+    if(
+        level.theme==="fire" ||
+        level.theme==="volcano"
+    ){
+        backColor="#3b1111";
+    }
+
+    if(
+        level.theme==="shadow" ||
+        level.theme==="final"
+    ){
+        backColor="#120c1d";
+    }
+
+    ctx.fillStyle=backColor;
 
     for(
         let x=-500;
@@ -1962,16 +2830,11 @@ function drawBackground(){
         x+=350
     ){
 
-        const sx =
-            x-cameraX*.3;
-
+        const sx=x-cameraX*.3;
 
         ctx.beginPath();
 
-        ctx.moveTo(
-            sx,
-            470
-        );
+        ctx.moveTo(sx,470);
 
         ctx.lineTo(
             sx+175,
@@ -1987,74 +2850,84 @@ function drawBackground(){
     }
 
 
-    ctx.fillStyle =
-        currentLevel===0
-        ? "#477047"
-        : "#1b1728";
+    /* EXTRA VOLCANO GLOW */
 
-
-    for(
-        let x=-700;
-        x<level.width+700;
-        x+=500
+    if(
+        level.theme==="fire" ||
+        level.theme==="volcano" ||
+        level.theme==="final"
     ){
 
-        const sx =
-            x-cameraX*.15;
+        ctx.fillStyle=
+            "rgba(255,70,0,.12)";
 
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            sx,
-            470
+        ctx.fillRect(
+            0,
+            400,
+            canvas.width,
+            70
         );
-
-        ctx.lineTo(
-            sx+250,
-            300
-        );
-
-        ctx.lineTo(
-            sx+500,
-            470
-        );
-
-        ctx.fill();
     }
 }
 
 
-/* =========================
+/* =========================================================
    PLATFORMS
-========================= */
+========================================================= */
 
 function drawPlatforms(){
 
-    const level =
-        levels[currentLevel];
-
+    const level=levels[currentLevel];
 
     for(const p of level.platforms){
 
-        const x =
-            p.x-cameraX;
-
+        const x=p.x-cameraX;
 
         if(
-            x+p.w < 0 ||
-            x > canvas.width
+            x+p.w<0 ||
+            x>canvas.width
         ){
-
             continue;
         }
 
+        let base="#272027";
+        let top="#8a2525";
 
-        ctx.fillStyle =
-            currentLevel===0
-            ? "#4f3423"
-            : "#272027";
+        if(level.theme==="green"){
 
+            base="#4f3423";
+            top="#3fa34d";
+
+        }else if(level.theme==="ice"){
+
+            base="#6b8290";
+            top="#d7f8ff";
+
+        }else if(level.theme==="desert"){
+
+            base="#70452c";
+            top="#d49a54";
+
+        }else if(
+            level.theme==="fire" ||
+            level.theme==="volcano"
+        ){
+
+            base="#321717";
+            top="#d93616";
+
+        }else if(level.theme==="city"){
+
+            base="#202532";
+            top="#4d6177";
+
+        }else if(level.theme==="final"){
+
+            base="#171018";
+            top="#8c163f";
+        }
+
+        ctx.fillStyle=base;
 
         ctx.fillRect(
             x,
@@ -2063,12 +2936,7 @@ function drawPlatforms(){
             p.h
         );
 
-
-        ctx.fillStyle =
-            currentLevel===0
-            ? "#3fa34d"
-            : "#8a2525";
-
+        ctx.fillStyle=top;
 
         ctx.fillRect(
             x,
@@ -2077,12 +2945,10 @@ function drawPlatforms(){
             8
         );
 
-
-        ctx.fillStyle =
-            currentLevel===0
-            ? "#65412b"
+        ctx.fillStyle=
+            level.theme==="ice"
+            ? "#a9d7e8"
             : "#392c38";
-
 
         for(
             let i=0;
@@ -2101,51 +2967,96 @@ function drawPlatforms(){
 }
 
 
-/* =========================
+/* =========================================================
+   SPIKES
+========================================================= */
+
+function drawSpikes(){
+
+    for(const s of levelSpikes){
+
+        const x=s.x-cameraX;
+
+        if(
+            x+s.w<0 ||
+            x>canvas.width
+        ){
+            continue;
+        }
+
+        ctx.fillStyle="#bfc3c8";
+
+        const count=
+            Math.max(
+                1,
+                Math.floor(s.w/15)
+            );
+
+        const step=s.w/count;
+
+        for(let i=0;i<count;i++){
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                x+i*step,
+                s.y+s.h
+            );
+
+            ctx.lineTo(
+                x+i*step+step/2,
+                s.y
+            );
+
+            ctx.lineTo(
+                x+(i+1)*step,
+                s.y+s.h
+            );
+
+            ctx.closePath();
+
+            ctx.fill();
+        }
+
+        ctx.fillStyle="#555";
+
+        ctx.fillRect(
+            x,
+            s.y+s.h-3,
+            s.w,
+            3
+        );
+    }
+}
+
+
+/* =========================================================
    COINS
-========================= */
+========================================================= */
 
 function drawCoins(){
 
     for(const c of levelCoins){
 
-        if(c.collected){
-            continue;
-        }
+        if(c.collected) continue;
 
+        c.animation+=.08;
 
-        c.animation += .08;
+        const x=c.x-cameraX;
 
-
-        const x =
-            c.x-cameraX;
-
-
-        const scale =
+        const scale=
             .75+
             Math.abs(
-                Math.sin(
-                    c.animation
-                )
+                Math.sin(c.animation)
             )*.25;
-
 
         ctx.save();
 
-        ctx.translate(
-            x,
-            c.y
-        );
+        ctx.translate(x,c.y);
 
-        ctx.scale(
-            scale,
-            1
-        );
+        ctx.scale(scale,1);
 
-
-        ctx.fillStyle =
-            "#ffd700";
-
+        ctx.fillStyle="#ffd700";
 
         ctx.beginPath();
 
@@ -2159,17 +3070,11 @@ function drawCoins(){
 
         ctx.fill();
 
-
-        ctx.strokeStyle =
-            "#ff9d00";
-
-        ctx.lineWidth = 3;
-
+        ctx.strokeStyle="#ff9d00";
+        ctx.lineWidth=3;
         ctx.stroke();
 
-
-        ctx.fillStyle =
-            "#fff4a3";
+        ctx.fillStyle="#fff4a3";
 
         ctx.fillRect(
             -3,
@@ -2178,190 +3083,247 @@ function drawCoins(){
             8
         );
 
+        ctx.restore();
+    }
+}
+
+
+/* =========================================================
+   ENEMIES
+========================================================= */
+
+function drawEnemies(){
+
+    for(const e of levelEnemies){
+
+        if(!e.alive) continue;
+
+        const x=e.x-cameraX;
+        const y=e.y;
+        const w=e.w;
+        const h=e.h;
+
+        if(
+            x+w<0 ||
+            x>canvas.width
+        ){
+            continue;
+        }
+
+
+        if(e.type==="flyer"){
+
+            ctx.fillStyle="#193b8f";
+
+            ctx.beginPath();
+
+            ctx.ellipse(
+                x+w/2,
+                y+h/2,
+                w/2,
+                h/2,
+                0,
+                0,
+                Math.PI*2
+            );
+
+            ctx.fill();
+
+            ctx.fillStyle="#6ec6ff";
+
+            ctx.fillRect(
+                x-8,
+                y+12,
+                12,
+                15
+            );
+
+            ctx.fillRect(
+                x+w-4,
+                y+12,
+                12,
+                15
+            );
+
+        }else{
+
+            let body="#7d24a8";
+
+            if(e.type==="fast"){
+                body="#b52b32";
+            }
+
+            if(e.type==="jumper"){
+                body="#2f9e58";
+            }
+
+            ctx.fillStyle="rgba(0,0,0,.3)";
+
+            ctx.fillRect(
+                x+3,
+                y+h-3,
+                w,
+                6
+            );
+
+            ctx.fillStyle=body;
+
+            ctx.fillRect(
+                x,
+                y,
+                w,
+                h
+            );
+
+            ctx.fillStyle="#fff";
+
+            ctx.fillRect(
+                x+6,
+                y+8,
+                8,
+                8
+            );
+
+            ctx.fillRect(
+                x+w-14,
+                y+8,
+                8,
+                8
+            );
+
+            ctx.fillStyle="#111";
+
+            ctx.fillRect(
+                x+9,
+                y+10,
+                4,
+                5
+            );
+
+            ctx.fillRect(
+                x+w-11,
+                y+10,
+                4,
+                5
+            );
+
+            ctx.fillStyle="#23051f";
+
+            ctx.fillRect(
+                x+6,
+                y+25,
+                w-12,
+                8
+            );
+
+            ctx.fillStyle="#fff";
+
+            for(let i=0;i<3;i++){
+
+                ctx.fillRect(
+                    x+9+i*7,
+                    y+25,
+                    4,
+                    6
+                );
+            }
+
+            ctx.fillStyle="#3b104e";
+
+            ctx.fillRect(
+                x+3,
+                y+h-6,
+                10,
+                7
+            );
+
+            ctx.fillRect(
+                x+w-13,
+                y+h-6,
+                10,
+                7
+            );
+        }
+    }
+}
+
+
+/* =========================================================
+   PROJECTILES
+========================================================= */
+
+function drawProjectiles(){
+
+    for(const p of levelProjectiles){
+
+        const x=p.x-cameraX;
+        const y=p.y;
+
+        ctx.save();
+
+        ctx.shadowColor="#ff4400";
+        ctx.shadowBlur=15;
+
+        ctx.fillStyle="#ff5a00";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            8,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
 
         ctx.restore();
     }
 }
 
 
-/* =========================
-   ENEMIES
-========================= */
-
-function drawEnemies(){
-
-    for(const e of levelEnemies){
-
-        if(!e.alive){
-            continue;
-        }
-
-
-        const x =
-            e.x-cameraX;
-
-        const y =
-            e.y;
-
-        const w =
-            e.w;
-
-        const h =
-            e.h;
-
-
-        ctx.fillStyle =
-            "rgba(0,0,0,.3)";
-
-        ctx.fillRect(
-            x+3,
-            y+h-3,
-            w,
-            6
-        );
-
-
-        ctx.fillStyle =
-            "#7d24a8";
-
-        ctx.fillRect(
-            x,
-            y,
-            w,
-            h
-        );
-
-
-        ctx.fillStyle =
-            "#54136f";
-
-        ctx.fillRect(
-            x,
-            y,
-            5,
-            h
-        );
-
-        ctx.fillRect(
-            x+w-5,
-            y,
-            5,
-            h
-        );
-
-
-        ctx.fillStyle =
-            "white";
-
-        ctx.fillRect(
-            x+6,
-            y+8,
-            8,
-            8
-        );
-
-        ctx.fillRect(
-            x+w-14,
-            y+8,
-            8,
-            8
-        );
-
-
-        ctx.fillStyle =
-            "black";
-
-        ctx.fillRect(
-            x+9,
-            y+10,
-            4,
-            5
-        );
-
-        ctx.fillRect(
-            x+w-11,
-            y+10,
-            4,
-            5
-        );
-
-
-        ctx.fillStyle =
-            "#23051f";
-
-        ctx.fillRect(
-            x+6,
-            y+25,
-            w-12,
-            8
-        );
-
-
-        ctx.fillStyle =
-            "white";
-
-
-        for(let i=0;i<3;i++){
-
-            ctx.fillRect(
-                x+9+i*7,
-                y+25,
-                4,
-                6
-            );
-        }
-
-
-        ctx.fillStyle =
-            "#3b104e";
-
-        ctx.fillRect(
-            x+3,
-            y+h-6,
-            10,
-            7
-        );
-
-        ctx.fillRect(
-            x+w-13,
-            y+h-6,
-            10,
-            7
-        );
-    }
-}
-
-
-/* =========================
+/* =========================================================
    BOSS
-========================= */
+========================================================= */
 
 function drawBoss(){
 
     if(
         !boss ||
-        boss.health <= 0
+        boss.health<=0
     ){
-
         return;
     }
 
+    const x=boss.x-cameraX;
+    const y=boss.y;
 
-    const x =
-        boss.x-cameraX;
+    const finalBoss=
+        currentLevel===9;
 
-    const y =
-        boss.y;
+    ctx.save();
 
+    if(boss.hitFlash>0){
 
-    ctx.shadowColor =
-        "#ff0000";
+        ctx.globalAlpha=
+            .65+
+            Math.sin(
+                boss.hitFlash
+            )*.2;
+    }
 
-    ctx.shadowBlur = 20;
+    ctx.shadowColor=
+        finalBoss
+        ? "#ff00aa"
+        : "#ff0000";
 
+    ctx.shadowBlur=25;
 
-    ctx.fillStyle =
-        "#4d0a0a";
+    ctx.fillStyle=
+        finalBoss
+        ? "#26002f"
+        : "#4d0a0a";
 
     ctx.fillRect(
         x,
@@ -2370,162 +3332,192 @@ function drawBoss(){
         boss.height
     );
 
+    ctx.shadowBlur=0;
 
-    ctx.shadowBlur = 0;
 
+    /* HORN */
 
-    ctx.fillStyle =
-        "#d8d8d8";
-
+    ctx.fillStyle="#d8d8d8";
 
     ctx.beginPath();
 
     ctx.moveTo(
-        x+15,
-        y+10
+        x+20,
+        y+15
     );
 
     ctx.lineTo(
         x,
-        y-25
+        y-35
     );
 
     ctx.lineTo(
-        x+30,
-        y+5
+        x+40,
+        y+10
     );
 
     ctx.fill();
 
-
     ctx.beginPath();
 
     ctx.moveTo(
-        x+boss.width-15,
-        y+10
+        x+boss.width-20,
+        y+15
     );
 
     ctx.lineTo(
         x+boss.width,
-        y-25
+        y-35
     );
 
     ctx.lineTo(
-        x+boss.width-30,
-        y+5
+        x+boss.width-40,
+        y+10
     );
 
     ctx.fill();
 
 
-    ctx.fillStyle =
-        "#ff2b00";
+    /* EYES */
+
+    ctx.fillStyle=
+        finalBoss
+        ? "#ff00ff"
+        : "#ff2b00";
 
     ctx.fillRect(
-        x+18,
-        y+30,
-        15,
-        8
+        x+25,
+        y+38,
+        20,
+        10
     );
 
     ctx.fillRect(
-        x+57,
-        y+30,
-        15,
-        8
-    );
-
-
-    ctx.fillStyle =
-        "#000";
-
-    ctx.fillRect(
-        x+20,
-        y+65,
-        50,
-        20
-    );
-
-
-    ctx.fillStyle =
-        "white";
-
-
-    for(let i=0;i<5;i++){
-
-        ctx.fillRect(
-            x+24+i*10,
-            y+65,
-            5,
-            10
-        );
-    }
-
-
-    ctx.fillStyle =
-        "#222";
-
-    ctx.fillRect(
-        x,
-        y-45,
-        boss.width,
+        x+boss.width-45,
+        y+38,
+        20,
         10
     );
 
 
-    ctx.fillStyle =
-        "#ff2222";
+    /* MOUTH */
+
+    ctx.fillStyle="#000";
+
+    ctx.fillRect(
+        x+25,
+        y+75,
+        boss.width-50,
+        30
+    );
+
+    ctx.fillStyle="#fff";
+
+    const teeth=
+        finalBoss
+        ? 7
+        : 5;
+
+    for(let i=0;i<teeth;i++){
+
+        ctx.fillRect(
+            x+30+i*
+                ((boss.width-60)/(teeth-1)),
+            y+75,
+            7,
+            13
+        );
+    }
+
+
+    /* HEALTH BAR */
+
+    ctx.fillStyle="#111";
 
     ctx.fillRect(
         x,
-        y-45,
+        y-55,
+        boss.width,
+        12
+    );
+
+    ctx.fillStyle=
+        finalBoss
+        ? "#ff1493"
+        : "#ff2222";
+
+    ctx.fillRect(
+        x,
+        y-55,
         boss.width*
         (
             boss.health/
             boss.maxHealth
         ),
-        10
+        12
     );
+
+    ctx.strokeStyle="#fff";
+    ctx.lineWidth=2;
+
+    ctx.strokeRect(
+        x,
+        y-55,
+        boss.width,
+        12
+    );
+
+    ctx.restore();
+
+
+    ctx.save();
+
+    ctx.textAlign="center";
+
+    ctx.font="bold 18px Arial";
+
+    ctx.fillStyle="#fff";
+
+    ctx.shadowColor="#000";
+    ctx.shadowBlur=5;
+
+    ctx.fillText(
+        finalBoss
+        ? "FINAL BOSS"
+        : "BOSS",
+        x+boss.width/2,
+        y-65
+    );
+
+    ctx.restore();
 }
 
 
-/* =========================
-   GOAL / FLAG
-========================= */
+/* =========================================================
+   GOAL
+========================================================= */
 
 function drawGoal(){
 
-    const goal =
+    const goal=
         levels[currentLevel].goal;
 
-    const x =
-        goal.x-cameraX;
+    const x=goal.x-cameraX;
+    const y=goal.y;
 
-    const y =
-        goal.y;
+    const celebrating=
+        levelCompleteTimer>0;
 
-
-    const celebrating =
-        levelCompleteTimer > 0;
-
-
-    const wave =
-        Math.sin(
-            Date.now()*.008
-        )*4;
-
+    const wave=
+        Math.sin(Date.now()*.008)*4;
 
     if(celebrating){
 
-        ctx.shadowColor =
-            "#ffd700";
-
-        ctx.shadowBlur = 25;
+        ctx.shadowColor="#ffd700";
+        ctx.shadowBlur=25;
     }
 
-
-    ctx.fillStyle =
-        "#d5d5d5";
+    ctx.fillStyle="#d5d5d5";
 
     ctx.fillRect(
         x+17,
@@ -2534,12 +3526,9 @@ function drawGoal(){
         80
     );
 
+    ctx.shadowBlur=0;
 
-    ctx.shadowBlur = 0;
-
-
-    ctx.fillStyle =
-        "#ffd700";
+    ctx.fillStyle="#ffd700";
 
     ctx.beginPath();
 
@@ -2553,12 +3542,10 @@ function drawGoal(){
 
     ctx.fill();
 
-
-    ctx.fillStyle =
-        currentLevel===2
-        ? "#ff3333"
+    ctx.fillStyle=
+        currentLevel===9
+        ? "#ff1493"
         : "#fff";
-
 
     ctx.beginPath();
 
@@ -2587,58 +3574,39 @@ function drawGoal(){
 }
 
 
-/* =========================
+/* =========================================================
    SECRET OBJECTS
-========================= */
+========================================================= */
 
 function drawSecretObjects(){
 
-    if(currentLevel !== 1){
+    if(currentLevel!==1){
         return;
     }
 
+    const level=levels[currentLevel];
 
-    const level =
-        levels[currentLevel];
+    const key=level.secretKey;
+    const door=level.secretDoor;
 
-    const key =
-        level.secretKey;
-
-    const door =
-        level.secretDoor;
-
-
-    /*
-        NYCKEL
-    */
 
     if(
         key.visible &&
         !key.collected
     ){
 
-        const x =
-            key.x-cameraX;
+        const x=key.x-cameraX;
+        const baseY=key.y;
 
-        const baseY =
-            key.y;
+        const float=
+            Math.sin(Date.now()*.006)*5;
 
-        const float =
-            Math.sin(
-                Date.now()*.006
-            )*5;
+        const rotation=
+            Math.sin(Date.now()*.004)*.12;
 
-        const rotation =
-            Math.sin(
-                Date.now()*.004
-            )*.12;
-
-        const pulse =
+        const pulse=
             22+
-            Math.sin(
-                Date.now()*.01
-            )*10;
-
+            Math.sin(Date.now()*.01)*10;
 
         ctx.save();
 
@@ -2649,26 +3617,11 @@ function drawSecretObjects(){
 
         ctx.rotate(rotation);
 
+        ctx.shadowColor="#ffd700";
+        ctx.shadowBlur=pulse;
 
-        /*
-            STORT GULDGLOW
-        */
-
-        ctx.shadowColor =
-            "#ffd700";
-
-        ctx.shadowBlur =
-            pulse;
-
-
-        /*
-            YTTRE RING
-        */
-
-        ctx.strokeStyle =
-            "#fff1a0";
-
-        ctx.lineWidth = 6;
+        ctx.strokeStyle="#fff1a0";
+        ctx.lineWidth=6;
 
         ctx.beginPath();
 
@@ -2682,15 +3635,8 @@ function drawSecretObjects(){
 
         ctx.stroke();
 
-
-        /*
-            INNER RING
-        */
-
-        ctx.strokeStyle =
-            "#ffd700";
-
-        ctx.lineWidth = 5;
+        ctx.strokeStyle="#ffd700";
+        ctx.lineWidth=5;
 
         ctx.beginPath();
 
@@ -2704,13 +3650,7 @@ function drawSecretObjects(){
 
         ctx.stroke();
 
-
-        /*
-            NYCKELNS SKAFT
-        */
-
-        ctx.fillStyle =
-            "#ffd700";
+        ctx.fillStyle="#ffd700";
 
         ctx.fillRect(
             8,
@@ -2718,11 +3658,6 @@ function drawSecretObjects(){
             30,
             7
         );
-
-
-        /*
-            NYCKELNS TAGGAR
-        */
 
         ctx.fillRect(
             28,
@@ -2738,13 +3673,7 @@ function drawSecretObjects(){
             10
         );
 
-
-        /*
-            LITEN HIGHLIGHT
-        */
-
-        ctx.fillStyle =
-            "#fffbd0";
+        ctx.fillStyle="#fffbd0";
 
         ctx.fillRect(
             9,
@@ -2753,33 +3682,22 @@ function drawSecretObjects(){
             4
         );
 
+        ctx.shadowBlur=0;
 
-        /*
-            GNISTOR
-        */
+        ctx.fillStyle="#fff6a0";
 
-        ctx.shadowBlur = 0;
-
-        ctx.fillStyle =
-            "#fff6a0";
-
-
-        const sparkleSize =
+        const sparkleSize=
             3+
-            Math.sin(
-                Date.now()*.012
-            )*1;
+            Math.sin(Date.now()*.012)*1;
 
-
-        const sparklePositions = [
+        const positions=[
             [-23,-13],
             [23,-17],
             [-25,15],
             [28,14]
         ];
 
-
-        for(const pos of sparklePositions){
+        for(const pos of positions){
 
             ctx.beginPath();
 
@@ -2794,29 +3712,17 @@ function drawSecretObjects(){
             ctx.fill();
         }
 
-
         ctx.restore();
-
-
-        /*
-            EXTRA TEXT OVANFÖR NYCKELN
-        */
 
         ctx.save();
 
-        ctx.textAlign =
-            "center";
+        ctx.textAlign="center";
+        ctx.font="bold 16px Arial";
 
-        ctx.font =
-            "bold 16px Arial";
+        ctx.shadowColor="#000";
+        ctx.shadowBlur=5;
 
-        ctx.shadowColor =
-            "#000";
-
-        ctx.shadowBlur = 5;
-
-        ctx.fillStyle =
-            "#ffd700";
+        ctx.fillStyle="#ffd700";
 
         ctx.fillText(
             "🔑",
@@ -2828,25 +3734,14 @@ function drawSecretObjects(){
     }
 
 
-    /*
-        DÖRR
-    */
+    /* DOOR */
 
-    const dx =
-        door.x-cameraX;
+    const dx=door.x-cameraX;
 
-
-    if(door.opened){
-
-        ctx.fillStyle =
-            "#251508";
-
-    }else{
-
-        ctx.fillStyle =
-            "#111";
-    }
-
+    ctx.fillStyle=
+        door.opened
+        ? "#251508"
+        : "#111";
 
     ctx.fillRect(
         dx,
@@ -2855,11 +3750,8 @@ function drawSecretObjects(){
         door.height
     );
 
-
-    ctx.strokeStyle =
-        "#8a6a3a";
-
-    ctx.lineWidth = 5;
+    ctx.strokeStyle="#8a6a3a";
+    ctx.lineWidth=5;
 
     ctx.strokeRect(
         dx,
@@ -2868,10 +3760,7 @@ function drawSecretObjects(){
         door.height
     );
 
-
-    ctx.fillStyle =
-        "#ffd700";
-
+    ctx.fillStyle="#ffd700";
 
     ctx.beginPath();
 
@@ -2885,18 +3774,12 @@ function drawSecretObjects(){
 
     ctx.fill();
 
-
-    ctx.textAlign =
-        "center";
-
-    ctx.font =
-        "bold 13px Arial";
-
+    ctx.textAlign="center";
+    ctx.font="bold 13px Arial";
 
     if(!door.opened){
 
-        ctx.fillStyle =
-            "#ffcc00";
+        ctx.fillStyle="#ffcc00";
 
         ctx.fillText(
             "🔒",
@@ -2908,8 +3791,7 @@ function drawSecretObjects(){
         level.secretKey.collected
     ){
 
-        ctx.fillStyle =
-            "#ffd700";
+        ctx.fillStyle="#ffd700";
 
         ctx.fillText(
             "E",
@@ -2920,71 +3802,53 @@ function drawSecretObjects(){
 }
 
 
-/* =========================
+/* =========================================================
    KEY PICKUP MESSAGE
-========================= */
+========================================================= */
 
 function drawKeyPickupMessage(){
 
-    if(keyPickupTimer <= 0){
+    if(keyPickupTimer<=0){
         return;
     }
 
-
-    const progress =
+    const progress=
         150-keyPickupTimer;
 
-
-    const fadeIn =
+    const fadeIn=
         Math.min(
             1,
             progress/15
         );
 
-
-    const fadeOut =
+    const fadeOut=
         Math.min(
             1,
             keyPickupTimer/25
         );
 
-
-    const alpha =
+    const alpha=
         Math.min(
             fadeIn,
             fadeOut
         );
 
-
-    const scale =
+    const scale=
         1+
-        Math.sin(
-            progress*.15
-        )*.04;
-
+        Math.sin(progress*.15)*.04;
 
     ctx.save();
 
-    ctx.globalAlpha =
-        alpha;
+    ctx.globalAlpha=alpha;
 
     ctx.translate(
         canvas.width/2,
         105
     );
 
-    ctx.scale(
-        scale,
-        scale
-    );
+    ctx.scale(scale,scale);
 
-
-    /*
-        BAKGRUNDSPLATTA
-    */
-
-    ctx.fillStyle =
-        "rgba(0,0,0,.65)";
+    ctx.fillStyle="rgba(0,0,0,.65)";
 
     ctx.beginPath();
 
@@ -2998,26 +3862,14 @@ function drawKeyPickupMessage(){
 
     ctx.fill();
 
+    ctx.shadowColor="#ffd700";
+    ctx.shadowBlur=25;
 
-    /*
-        GLOW
-    */
+    ctx.textAlign="center";
 
-    ctx.shadowColor =
-        "#ffd700";
+    ctx.font="bold 32px Arial";
 
-    ctx.shadowBlur = 25;
-
-
-    ctx.textAlign =
-        "center";
-
-    ctx.font =
-        "bold 32px Arial";
-
-    ctx.fillStyle =
-        "#ffd700";
-
+    ctx.fillStyle="#ffd700";
 
     ctx.fillText(
         "🔑 NYCKEL!",
@@ -3025,15 +3877,11 @@ function drawKeyPickupMessage(){
         5
     );
 
+    ctx.shadowBlur=0;
 
-    ctx.shadowBlur = 0;
+    ctx.font="bold 16px Arial";
 
-
-    ctx.font =
-        "bold 16px Arial";
-
-    ctx.fillStyle =
-        "#fff";
+    ctx.fillStyle="#fff";
 
     ctx.fillText(
         "+500 poäng",
@@ -3041,42 +3889,32 @@ function drawKeyPickupMessage(){
         27
     );
 
-
     ctx.restore();
 }
 
 
-/* =========================
+/* =========================================================
    PLAYER DRAW
-========================= */
+========================================================= */
 
 function drawPlayer(){
 
     if(
-        player.invincible > 0 &&
+        player.invincible>0 &&
         Math.floor(
             player.invincible/5
         )%2===0
     ){
-
         return;
     }
 
+    const x=player.x-cameraX;
+    const y=player.y;
 
-    const x =
-        player.x-cameraX;
-
-    const y =
-        player.y;
-
-
-    const bob =
+    const bob=
         player.grounded
-        ? Math.sin(
-            player.walkAnimation
-        )*2
+        ? Math.sin(player.walkAnimation)*2
         : 0;
-
 
     ctx.save();
 
@@ -3085,9 +3923,7 @@ function drawPlayer(){
         y+bob
     );
 
-
-    ctx.fillStyle =
-        "#e53935";
+    ctx.fillStyle="#e53935";
 
     ctx.fillRect(
         5,
@@ -3096,9 +3932,7 @@ function drawPlayer(){
         28
     );
 
-
-    ctx.fillStyle =
-        "#f2b27a";
+    ctx.fillStyle="#f2b27a";
 
     ctx.fillRect(
         7,
@@ -3107,9 +3941,7 @@ function drawPlayer(){
         20
     );
 
-
-    ctx.fillStyle =
-        "#4a2415";
+    ctx.fillStyle="#4a2415";
 
     ctx.fillRect(
         6,
@@ -3118,9 +3950,7 @@ function drawPlayer(){
         7
     );
 
-
-    ctx.fillStyle =
-        "#e53935";
+    ctx.fillStyle="#e53935";
 
     ctx.fillRect(
         4,
@@ -3129,12 +3959,9 @@ function drawPlayer(){
         7
     );
 
+    ctx.fillStyle="#111";
 
-    ctx.fillStyle =
-        "#111";
-
-
-    if(player.direction === 1){
+    if(player.direction===1){
 
         ctx.fillRect(
             22,
@@ -3153,9 +3980,7 @@ function drawPlayer(){
         );
     }
 
-
-    ctx.fillStyle =
-        "#f2b27a";
+    ctx.fillStyle="#f2b27a";
 
     ctx.fillRect(
         0,
@@ -3171,9 +3996,7 @@ function drawPlayer(){
         17
     );
 
-
-    ctx.fillStyle =
-        "#2455a4";
+    ctx.fillStyle="#2455a4";
 
     ctx.fillRect(
         7,
@@ -3189,14 +4012,13 @@ function drawPlayer(){
         8
     );
 
-
     ctx.restore();
 }
 
 
-/* =========================
+/* =========================================================
    SECRET ROOM
-========================= */
+========================================================= */
 
 function enterSecretRoom(){
 
@@ -3204,26 +4026,19 @@ function enterSecretRoom(){
         return;
     }
 
+    secretRoomActive=true;
+    gameRunning=false;
 
-    secretRoomActive = true;
+    levels[currentLevel]
+        .secretRoom.active=true;
 
-    gameRunning = false;
+    player.x=220;
+    player.y=350;
 
+    player.velocityX=0;
+    player.velocityY=0;
 
-    levels[
-        currentLevel
-    ].secretRoom.active = true;
-
-
-    player.x = 220;
-    player.y = 350;
-
-    player.velocityX = 0;
-    player.velocityY = 0;
-
-
-    cameraX = 0;
-
+    cameraX=0;
 
     playSound(
         500,
@@ -3233,49 +4048,35 @@ function enterSecretRoom(){
     );
 }
 
-
 function exitSecretRoom(){
 
-    secretRoomActive = false;
+    secretRoomActive=false;
+    gameRunning=true;
 
-    gameRunning = true;
+    levels[currentLevel]
+        .secretRoom.active=false;
 
+    const door=
+        levels[currentLevel].secretDoor;
 
-    levels[
-        currentLevel
-    ].secretRoom.active = false;
-
-
-    const door =
-        levels[
-            currentLevel
-        ].secretDoor;
-
-
-    player.x =
+    player.x=
         door.x+
         door.width+
         15;
 
-    player.y =
-        390;
+    player.y=390;
 
+    player.velocityX=0;
+    player.velocityY=0;
 
-    player.velocityX = 0;
-    player.velocityY = 0;
-
-
-    cameraX =
+    cameraX=
         clamp(
             player.x-
             canvas.width*.4,
             0,
-            levels[
-                currentLevel
-            ].width-
+            levels[currentLevel].width-
             canvas.width
         );
-
 
     playSound(
         350,
@@ -3286,34 +4087,84 @@ function exitSecretRoom(){
 }
 
 
-/* =========================
+/* =========================================================
+   SECRET ROOM UPDATE
+========================================================= */
+
+function updateSecretRoomPlayer(){
+
+    const left=
+        keys.KeyA ||
+        keys.ArrowLeft;
+
+    const right=
+        keys.KeyD ||
+        keys.ArrowRight;
+
+    if(left && !right){
+
+        player.x-=4;
+        player.direction=-1;
+
+    }else if(right && !left){
+
+        player.x+=4;
+        player.direction=1;
+    }
+
+    player.x=
+        clamp(
+            player.x,
+            110,
+            850
+        );
+
+    player.y=350;
+
+    const level=
+        levels[currentLevel];
+
+    if(interactPressed){
+
+        interactPressed=false;
+
+        if(player.x<220){
+
+            exitSecretRoom();
+            return;
+        }
+
+        if(
+            !level.secretRoom.chestOpened &&
+            player.x>385 &&
+            player.x<590
+        ){
+
+            openSecretChest();
+            return;
+        }
+    }
+}
+
+
+/* =========================================================
    CHEST
-========================= */
+========================================================= */
 
 function openSecretChest(){
 
-    const level =
+    const level=
         levels[currentLevel];
 
-
-    if(
-        level.secretRoom.chestOpened
-    ){
-
+    if(level.secretRoom.chestOpened){
         return;
     }
 
+    level.secretRoom.chestOpened=true;
 
-    level.secretRoom.chestOpened = true;
-
-    secretChestOpened = true;
-
-
-    score += 2000;
-
+    score+=2000;
 
     createConfetti(120);
-
 
     playSound(
         900,
@@ -3322,17 +4173,13 @@ function openSecretChest(){
         .06
     );
 
-
     setTimeout(()=>{
 
-        level.secretRoom.medalCollected = true;
+        level.secretRoom.medalCollected=true;
 
-        secretMedalCollected = true;
-
-        score += 5000;
+        score+=5000;
 
         createConfetti(180);
-
 
         playSound(
             1200,
@@ -3345,24 +4192,22 @@ function openSecretChest(){
 }
 
 
-/* =========================
+/* =========================================================
    SECRET ROOM DRAW
-========================= */
+========================================================= */
 
 function drawSecretRoom(){
 
-    const level =
+    const level=
         levels[currentLevel];
 
-
-    const gradient =
+    const gradient=
         ctx.createLinearGradient(
             0,
             0,
             0,
             canvas.height
         );
-
 
     gradient.addColorStop(
         0,
@@ -3374,9 +4219,7 @@ function drawSecretRoom(){
         "#25102d"
     );
 
-
-    ctx.fillStyle =
-        gradient;
+    ctx.fillStyle=gradient;
 
     ctx.fillRect(
         0,
@@ -3385,9 +4228,7 @@ function drawSecretRoom(){
         canvas.height
     );
 
-
-    ctx.fillStyle =
-        "#30203a";
+    ctx.fillStyle="#30203a";
 
     ctx.fillRect(
         80,
@@ -3396,9 +4237,7 @@ function drawSecretRoom(){
         400
     );
 
-
-    ctx.fillStyle =
-        "#17131b";
+    ctx.fillStyle="#17131b";
 
     ctx.fillRect(
         80,
@@ -3414,9 +4253,7 @@ function drawSecretRoom(){
         35
     );
 
-
-    ctx.fillStyle =
-        "#5b3970";
+    ctx.fillStyle="#5b3970";
 
     ctx.fillRect(
         130,
@@ -3432,16 +4269,11 @@ function drawSecretRoom(){
         180
     );
 
+    ctx.textAlign="center";
 
-    ctx.textAlign =
-        "center";
+    ctx.fillStyle="#ffd700";
 
-    ctx.fillStyle =
-        "#ffd700";
-
-    ctx.font =
-        "bold 32px Arial";
-
+    ctx.font="bold 32px Arial";
 
     ctx.fillText(
         "HEMLIGA RUMMET",
@@ -3449,13 +4281,9 @@ function drawSecretRoom(){
         155
     );
 
+    ctx.font="18px Arial";
 
-    ctx.font =
-        "18px Arial";
-
-    ctx.fillStyle =
-        "#aaa";
-
+    ctx.fillStyle="#aaa";
 
     ctx.fillText(
         "Du hittade den gömda skatten...",
@@ -3463,13 +4291,10 @@ function drawSecretRoom(){
         185
     );
 
+    const chestX=430;
+    const chestY=330;
 
-    const chestX = 430;
-    const chestY = 330;
-
-
-    ctx.fillStyle =
-        "rgba(0,0,0,.4)";
+    ctx.fillStyle="rgba(0,0,0,.4)";
 
     ctx.fillRect(
         chestX+5,
@@ -3478,9 +4303,7 @@ function drawSecretRoom(){
         15
     );
 
-
-    ctx.fillStyle =
-        "#8b4a20";
+    ctx.fillStyle="#8b4a20";
 
     ctx.fillRect(
         chestX,
@@ -3489,13 +4312,9 @@ function drawSecretRoom(){
         60
     );
 
+    if(!level.secretRoom.chestOpened){
 
-    if(
-        !level.secretRoom.chestOpened
-    ){
-
-        ctx.fillStyle =
-            "#a8662b";
+        ctx.fillStyle="#a8662b";
 
         ctx.fillRect(
             chestX,
@@ -3504,9 +4323,7 @@ function drawSecretRoom(){
             25
         );
 
-
-        ctx.fillStyle =
-            "#d39b35";
+        ctx.fillStyle="#d39b35";
 
         ctx.fillRect(
             chestX+8,
@@ -3522,9 +4339,7 @@ function drawSecretRoom(){
             50
         );
 
-
-        ctx.fillStyle =
-            "#ffd700";
+        ctx.fillStyle="#ffd700";
 
         ctx.fillRect(
             chestX+62,
@@ -3535,8 +4350,7 @@ function drawSecretRoom(){
 
     }else{
 
-        ctx.fillStyle =
-            "#a8662b";
+        ctx.fillStyle="#a8662b";
 
         ctx.fillRect(
             chestX,
@@ -3545,16 +4359,10 @@ function drawSecretRoom(){
             25
         );
 
+        ctx.shadowColor="#ffd700";
+        ctx.shadowBlur=25;
 
-        ctx.shadowColor =
-            "#ffd700";
-
-        ctx.shadowBlur = 25;
-
-
-        ctx.fillStyle =
-            "#ffd700";
-
+        ctx.fillStyle="#ffd700";
 
         ctx.beginPath();
 
@@ -3568,9 +4376,7 @@ function drawSecretRoom(){
 
         ctx.fill();
 
-
-        ctx.shadowBlur = 0;
-
+        ctx.shadowBlur=0;
 
         ctx.beginPath();
 
@@ -3584,21 +4390,12 @@ function drawSecretRoom(){
 
         ctx.fill();
 
-
-        ctx.strokeStyle =
-            "#fff2a8";
-
-        ctx.lineWidth = 4;
-
+        ctx.strokeStyle="#fff2a8";
+        ctx.lineWidth=4;
         ctx.stroke();
 
-
-        ctx.fillStyle =
-            "#8a5a00";
-
-        ctx.font =
-            "bold 18px Arial";
-
+        ctx.fillStyle="#8a5a00";
+        ctx.font="bold 18px Arial";
 
         ctx.fillText(
             "★",
@@ -3607,17 +4404,10 @@ function drawSecretRoom(){
         );
     }
 
+    ctx.fillStyle="#fff";
+    ctx.font="16px Arial";
 
-    ctx.fillStyle =
-        "#fff";
-
-    ctx.font =
-        "16px Arial";
-
-
-    if(
-        !level.secretRoom.chestOpened
-    ){
+    if(!level.secretRoom.chestOpened){
 
         ctx.fillText(
             "Gå fram till kistan och tryck E",
@@ -3644,9 +4434,7 @@ function drawSecretRoom(){
         );
     }
 
-
-    ctx.fillStyle =
-        "#555";
+    ctx.fillStyle="#555";
 
     ctx.fillRect(
         120,
@@ -3655,13 +4443,9 @@ function drawSecretRoom(){
         55
     );
 
+    ctx.fillStyle="#ddd";
 
-    ctx.fillStyle =
-        "#ddd";
-
-    ctx.font =
-        "14px Arial";
-
+    ctx.font="14px Arial";
 
     ctx.fillText(
         "UT",
@@ -3669,15 +4453,10 @@ function drawSecretRoom(){
         397
     );
 
+    if(player.x<230){
 
-    if(player.x < 230){
-
-        ctx.fillStyle =
-            "#ffd700";
-
-        ctx.font =
-            "bold 14px Arial";
-
+        ctx.fillStyle="#ffd700";
+        ctx.font="bold 14px Arial";
 
         ctx.fillText(
             "E = Gå ut",
@@ -3686,34 +4465,24 @@ function drawSecretRoom(){
         );
     }
 
-
     drawSecretRoomPlayer();
 }
 
 
-/* =========================
-   SECRET ROOM PLAYER
-========================= */
+/* =========================================================
+   SECRET ROOM PLAYER DRAW
+========================================================= */
 
 function drawSecretRoomPlayer(){
 
-    const x =
-        player.x;
-
-    const y =
-        player.y;
-
+    const x=player.x;
+    const y=player.y;
 
     ctx.save();
 
-    ctx.translate(
-        x,
-        y
-    );
+    ctx.translate(x,y);
 
-
-    ctx.fillStyle =
-        "#e53935";
+    ctx.fillStyle="#e53935";
 
     ctx.fillRect(
         5,
@@ -3722,9 +4491,7 @@ function drawSecretRoomPlayer(){
         28
     );
 
-
-    ctx.fillStyle =
-        "#f2b27a";
+    ctx.fillStyle="#f2b27a";
 
     ctx.fillRect(
         7,
@@ -3733,9 +4500,7 @@ function drawSecretRoomPlayer(){
         20
     );
 
-
-    ctx.fillStyle =
-        "#4a2415";
+    ctx.fillStyle="#4a2415";
 
     ctx.fillRect(
         6,
@@ -3744,9 +4509,7 @@ function drawSecretRoomPlayer(){
         7
     );
 
-
-    ctx.fillStyle =
-        "#e53935";
+    ctx.fillStyle="#e53935";
 
     ctx.fillRect(
         4,
@@ -3755,12 +4518,9 @@ function drawSecretRoomPlayer(){
         7
     );
 
+    ctx.fillStyle="#111";
 
-    ctx.fillStyle =
-        "#111";
-
-
-    if(player.direction === 1){
+    if(player.direction===1){
 
         ctx.fillRect(
             22,
@@ -3779,9 +4539,7 @@ function drawSecretRoomPlayer(){
         );
     }
 
-
-    ctx.fillStyle =
-        "#f2b27a";
+    ctx.fillStyle="#f2b27a";
 
     ctx.fillRect(
         0,
@@ -3797,9 +4555,7 @@ function drawSecretRoomPlayer(){
         17
     );
 
-
-    ctx.fillStyle =
-        "#2455a4";
+    ctx.fillStyle="#2455a4";
 
     ctx.fillRect(
         7,
@@ -3815,14 +4571,13 @@ function drawSecretRoomPlayer(){
         8
     );
 
-
     ctx.restore();
 }
 
 
-/* =========================
+/* =========================================================
    CAMERA
-========================= */
+========================================================= */
 
 function updateCamera(){
 
@@ -3830,108 +4585,82 @@ function updateCamera(){
         return;
     }
 
-
-    const target =
+    const target=
         player.x-
         canvas.width*.4;
 
-
-    cameraX +=
+    cameraX+=
         (
             target-cameraX
         )*.1;
 
-
-    cameraX =
+    cameraX=
         clamp(
             cameraX,
             0,
-            levels[
-                currentLevel
-            ].width-
+            levels[currentLevel].width-
             canvas.width
         );
 }
 
 
-/* =========================
+/* =========================================================
    HUD
-========================= */
+========================================================= */
 
 function updateHUD(){
 
-    coinsElement.textContent =
-        coins;
+    coinsElement.textContent=coins;
+    livesElement.textContent=lives;
+    scoreElement.textContent=score;
 
-    livesElement.textContent =
-        lives;
+    if(currentLevel===1){
 
-    scoreElement.textContent =
-        score;
-
-
-    if(currentLevel === 1){
-
-        const key =
+        const key=
             levels[currentLevel].secretKey;
-
 
         if(key.collected){
 
-            keyStatusElement.textContent =
-                "JA";
-
-            keyStatusElement.style.color =
-                "#ffd700";
+            keyStatusElement.textContent="JA";
+            keyStatusElement.style.color="#ffd700";
 
         }else{
 
-            keyStatusElement.textContent =
-                "NEJ";
-
-            keyStatusElement.style.color =
-                "#aaa";
+            keyStatusElement.textContent="NEJ";
+            keyStatusElement.style.color="#aaa";
         }
 
     }else{
 
-        keyStatusElement.textContent =
-            "—";
-
-        keyStatusElement.style.color =
-            "#aaa";
+        keyStatusElement.textContent="—";
+        keyStatusElement.style.color="#aaa";
     }
 }
 
 
-/* =========================
+/* =========================================================
    COMPLETE LEVEL
-========================= */
+========================================================= */
 
 function completeLevel(){
 
-    if(levelTransition > 0){
+    if(levelTransition>0){
         return;
     }
 
+    levelTransition=100;
+    levelCompleteTimer=110;
 
-    levelTransition = 100;
+    player.velocityX=0;
+    player.velocityY=0;
 
-    levelCompleteTimer = 110;
-
-    player.velocityX = 0;
-    player.velocityY = 0;
-
-
-    score += 1000;
-
+    score+=1000;
 
     createConfetti(
-        currentLevel === levels.length-1
-        ? 220
-        : 140
+        currentLevel===levels.length-1
+        ? 300
+        : 150
     );
-
 
     playSound(
         700,
@@ -3940,15 +4669,14 @@ function completeLevel(){
         .06
     );
 
-
     setTimeout(()=>{
 
         if(
-            currentLevel <
+            currentLevel<
             levels.length-1
         ){
 
-            levelCompleteTimer = 0;
+            levelCompleteTimer=0;
 
             loadLevel(
                 currentLevel+1
@@ -3956,102 +4684,93 @@ function completeLevel(){
 
         }else{
 
-            levelCompleteTimer = 0;
+            levelCompleteTimer=0;
 
             winGame();
         }
 
-
-        levelTransition = 0;
+        levelTransition=0;
 
     },2300);
 }
 
 
-/* =========================
+/* =========================================================
    GAME OVER
-========================= */
+========================================================= */
 
 function gameOver(){
 
-    gameRunning = false;
+    gameRunning=false;
 
-    messageTitle.textContent =
-        "GAME OVER";
+    messageTitle.textContent="GAME OVER";
 
-    messageText.textContent =
-        "Lavan tog dig! Poäng: "+
+    messageText.textContent=
+        "Du nådde bana "+
+        (currentLevel+1)+
+        "! Poäng: "+
         score;
 
-    message.style.display =
-        "flex";
+    message.style.display="flex";
 }
 
 
-/* =========================
+/* =========================================================
    WIN
-========================= */
+========================================================= */
 
 function winGame(){
 
-    gameRunning = false;
+    gameRunning=false;
 
-    createConfetti(300);
+    createConfetti(350);
 
+    messageTitle.textContent=
+        "DU KLARADE ALLA 10 BANOR! 🎉";
 
-    messageTitle.textContent =
-        "DU KLARADE DET! 🎉";
-
-
-    messageText.textContent =
-        "Alla banor är klara! Poäng: "+
+    messageText.textContent=
+        "Du besegrade båda bossarna! Poäng: "+
         score;
 
-
-    message.style.display =
-        "flex";
+    message.style.display="flex";
 }
 
 
-/* =========================
+/* =========================================================
    MESSAGE
-========================= */
+========================================================= */
 
 function hideMessage(){
 
-    message.style.display =
-        "none";
+    message.style.display="none";
 }
 
 
-/* =========================
+/* =========================================================
    RESTART
-========================= */
+========================================================= */
 
 function restartGame(){
 
-    coins = 0;
-    lives = 3;
-    score = 0;
+    coins=0;
+    lives=3;
+    score=0;
 
-    gameRunning = true;
+    gameRunning=true;
 
-    levelTransition = 0;
-    levelCompleteTimer = 0;
+    levelTransition=0;
+    levelCompleteTimer=0;
 
-    keyPickupTimer = 0;
+    keyPickupTimer=0;
 
-    secretRoomActive = false;
-    secretMedalCollected = false;
-    secretChestOpened = false;
+    secretRoomActive=false;
 
-    confetti.length = 0;
+    confetti.length=0;
 
     updateHUD();
 
     loadLevel(0);
 }
-
 
 restartButton.addEventListener(
     "click",
@@ -4062,15 +4781,11 @@ restartButton.addEventListener(
 );
 
 
-/* =========================
+/* =========================================================
    DRAW
-========================= */
+========================================================= */
 
 function draw(){
-
-    /*
-        HEMLIGT RUM
-    */
 
     if(secretRoomActive){
 
@@ -4081,18 +4796,12 @@ function draw(){
             canvas.height
         );
 
-
         drawSecretRoom();
 
         drawConfetti();
 
         return;
     }
-
-
-    /*
-        VANLIG BANA
-    */
 
     ctx.clearRect(
         0,
@@ -4101,16 +4810,21 @@ function draw(){
         canvas.height
     );
 
-
     drawBackground();
 
     drawLava();
 
     drawPlatforms();
 
+    drawMovingPlatforms();
+
+    drawSpikes();
+
     drawCoins();
 
     drawEnemies();
+
+    drawProjectiles();
 
     drawBoss();
 
@@ -4122,21 +4836,12 @@ function draw(){
 
     drawConfetti();
 
-
-    /*
-        NYCKELUPPTAGNING
-    */
-
     drawKeyPickupMessage();
 
 
-    /*
-        LEVEL COMPLETE TEXT
-    */
+    if(levelCompleteTimer>0){
 
-    if(levelCompleteTimer > 0){
-
-        const alpha =
+        const alpha=
             Math.min(
                 1,
                 (
@@ -4145,81 +4850,61 @@ function draw(){
                 )/20
             );
 
-
         ctx.save();
 
-        ctx.globalAlpha =
-            alpha;
+        ctx.globalAlpha=alpha;
 
-        ctx.textAlign =
-            "center";
+        ctx.textAlign="center";
 
+        ctx.font="bold 46px Arial";
 
-        ctx.font =
-            "bold 46px Arial";
+        ctx.fillStyle="#fff";
 
-        ctx.fillStyle =
-            "#fff";
-
-        ctx.shadowColor =
-            "#000";
-
-        ctx.shadowBlur = 8;
-
+        ctx.shadowColor="#000";
+        ctx.shadowBlur=8;
 
         ctx.fillText(
-            currentLevel === levels.length-1
+            currentLevel===levels.length-1
             ? "DU KLARADE DET!"
             : "BANA KLAR!",
             canvas.width/2,
             150
         );
 
+        ctx.font="bold 22px Arial";
 
-        ctx.font =
-            "bold 22px Arial";
-
-        ctx.fillStyle =
-            "#ffd700";
-
+        ctx.fillStyle="#ffd700";
 
         ctx.fillText(
-            currentLevel === levels.length-1
+            currentLevel===levels.length-1
             ? "🎉 FANTASTISKT! 🎉"
             : "Nästa bana kommer...",
             canvas.width/2,
             190
         );
 
-
         ctx.restore();
     }
 }
 
 
-/* =========================
+/* =========================================================
    GAME LOOP
-========================= */
+========================================================= */
 
 function gameLoop(){
 
     updatePlayer();
 
+    updateMovingPlatforms();
+
     updateCamera();
 
     updateConfetti();
 
-
-    /*
-        TIMER FÖR
-        NYCKELMEDDELANDET
-    */
-
-    if(keyPickupTimer > 0){
-
+    if(keyPickupTimer>0){
         keyPickupTimer--;
     }
-
 
     updateHUD();
 
@@ -4231,9 +4916,9 @@ function gameLoop(){
 }
 
 
-/* =========================
+/* =========================================================
    START
-========================= */
+========================================================= */
 
 loadLevel(0);
 
